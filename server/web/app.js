@@ -65,7 +65,15 @@
     });
   }
   const meter = (pct, idx) => `<span class="dc${idx}"><svg viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true"><rect class="track" width="100" height="8" rx="4"/><rect class="fill" width="${Math.max(pct > 0 ? 2 : 0, Math.min(100, pct))}" height="8" rx="4"/></svg></span>`;
-  const prog = p => p == null ? '<span class="muted">n/a</span>' : `<svg class="prog" viewBox="0 0 100 6" preserveAspectRatio="none" role="img" aria-label="${p}% watched"><rect class="track" width="100" height="6" rx="3"/><rect class="fill" width="${p}" height="6" rx="3"/></svg> <span class="num small">${p}%</span>`;
+  const prog = (p, anim) => p == null ? '<span class="muted">n/a</span>' : `<svg class="prog" viewBox="0 0 100 6" preserveAspectRatio="none" role="img" aria-label="${p}% watched"><rect class="track" width="100" height="6" rx="3"/><rect class="fill" width="${anim ? 0 : p}" data-w="${p}" height="6" rx="3"/></svg> <span class="num small">${p}%</span>`;
+  // Grow freshly rendered bars from 0 to their value (the CSS transition lives behind prefers-reduced-motion; with it set they just snap).
+  const growBars = root => {
+    const bars = root.querySelectorAll(".prog .fill[data-w]");
+    const set = () => bars.forEach(b => b.setAttribute("width", b.dataset.w));
+    if (!bars.length) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) set(); else requestAnimationFrame(() => requestAnimationFrame(set));
+  };
+  const clock = ms => { const t = Math.max(0, Math.floor((ms || 0) / 1000)), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), x = t % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); };
   async function loadDevices() {
     devices = (await api("GET", "/api/devices")).slice().sort((a, b) => a.enrolled_at - b.enrolled_at);
     const n = devices.filter(d => d.status === "pending").length, b = $("pendingBadge");
@@ -226,6 +234,9 @@
   }
 
   /* ---- history: every device in one list, with filters, export and per-session detail ---- */
+  // A session is "live" only if it has not ended AND the server accepted a push for it within LIVE_MS. The extension flushes every 5 s
+  // while playing and syncs ~5 s later, so a healthy live session is at most ~10-15 s old; a paused tab stops flushing and so stops being live.
+  const LIVE_MS = 30000, POLL_MS = 10000;
   const hf = { device: "all", from: "", to: "", q: "", url: "", offset: 0 };
   async function pageHistory() {
     await loadDevices();
@@ -250,16 +261,53 @@
     $("hClear").onclick = () => { Object.assign(hf, { device: "all", from: "", to: "", q: "", url: "", offset: 0 }); pageHistory(); };
     $("exCsv").onclick = guarded(() => download("/api/export" + qs({ format: "csv", device: hf.device, from: dayStart(hf.from), to: dayEnd(hf.to), q: hf.q, url: hf.url }), "watch-history.csv"));
     $("exJson").onclick = guarded(() => download("/api/export" + qs({ format: "json", device: hf.device, from: dayStart(hf.from), to: dayEnd(hf.to), q: hf.q, url: hf.url }), "watch-history.json"));
+    let offset = 0, liveTick = null, livePoll = null;
+    const serverNow = () => Date.now() + offset;
+    const isLive = it => !it.endTs && it.updatedAt != null && serverNow() - it.updatedAt < LIVE_MS;
     function renderRows(r) {
       const box = $("hres");
+      offset = r.serverNow - Date.now();
+      clearInterval(liveTick); clearInterval(livePoll);
+      const live = new Map();
+      for (const it of r.items) if (isLive(it)) live.set(it.sessionId, { base: it.watchedMs, at: it.updatedAt });
       if (!r.items.length) {
         const clean = r.total === 0 && !hf.q && !hf.url && !hf.from && !hf.to && hf.device === "all";
         box.innerHTML = clean ? empty("film", "No viewing recorded yet", "Sessions appear here a few seconds after a paired device finishes or pauses a video.") : empty("search", "No sessions match these filters", "Try a wider date range, or clear the filters.");
         return;
       }
       box.innerHTML = `<p class="caption result-meta">${r.total} session${r.total === 1 ? "" : "s"}${r.truncated ? " (list capped; narrow the dates)" : ""}</p><table class="table rtable"><thead><tr><th>Video</th><th>Device</th><th>Started</th><th class="right">Watched</th><th class="right">Progress</th><th class="right">Seeks / pauses</th></tr></thead><tbody>
-        ${r.items.map((it, i) => `<tr class="click" tabindex="0" data-i="${i}" aria-expanded="false"><td data-primary><div class="cell-primary clip">${esc(it.title || it.videoId)}</div><div class="cell-sub">${esc(it.channel)}</div></td><td data-label="Device">${chip(it.deviceId, it.deviceLabel)}</td><td class="num" data-label="Started">${esc(U.fmtDateTime(it.startTs))}</td><td class="num right" data-label="Watched">${dur(it.watchedMs)}</td><td class="right" data-label="Progress"><span class="cell-prog">${prog(it.progress)}${it.completed ? ' <span class="pill on"><span class="dot"></span><span>Finished</span></span>' : ""}</span></td><td class="num right" data-label="Seeks / pauses">${it.seeks} / ${it.pauses}</td></tr>`).join("")}</tbody></table>
+        ${r.items.map((it, i) => `<tr class="click" tabindex="0" data-i="${i}" aria-expanded="false"><td data-primary><div class="cell-primary clip">${esc(it.title || it.videoId)}</div><div class="cell-sub">${esc(it.channel)}</div></td><td data-label="Device">${chip(it.deviceId, it.deviceLabel)}</td><td class="num" data-label="Started">${esc(U.fmtDateTime(it.startTs))}</td><td class="num right" data-label="Watched">${live.has(it.sessionId) ? `<span class="pill on live"><span class="dot"></span><span>Live</span></span> <span class="live-t" data-sid="${esc(it.sessionId)}">${clock(it.watchedMs)}</span>` : dur(it.watchedMs)}</td><td class="right" data-label="Progress"><span class="cell-prog">${prog(it.progress, true)}${it.completed ? ' <span class="pill on"><span class="dot"></span><span>Finished</span></span>' : ""}</span></td><td class="num right" data-label="Seeks / pauses">${it.seeks} / ${it.pauses}</td></tr>`).join("")}</tbody></table>
         <div class="pager"><button class="btn" id="pPrev" type="button" ${hf.offset === 0 ? "disabled" : ""}>${ic("chevron-left")}Previous</button><span class="caption num">${hf.offset + 1} to ${hf.offset + r.items.length} of ${r.total}</span><button class="btn" id="pNext" type="button" ${hf.offset + PAGE >= r.total ? "disabled" : ""}>Next${ic("chevron-right")}</button></div>`;
+      growBars(box);
+      if (live.size) {
+        const gone = () => !document.body.contains(box);
+        liveTick = setInterval(() => {
+          if (gone()) { clearInterval(liveTick); clearInterval(livePoll); return; }
+          for (const el of box.querySelectorAll(".live-t")) {
+            const st = live.get(el.dataset.sid); if (!st) continue;
+            const age = serverNow() - st.at;
+            if (age >= LIVE_MS) { // no push for LIVE_MS: stop pretending, show the last synced figure
+              live.delete(el.dataset.sid);
+              el.parentElement.innerHTML = dur(st.base);
+            } else el.textContent = clock(st.base + age);
+          }
+          if (!live.size) { clearInterval(liveTick); clearInterval(livePoll); }
+        }, 1000);
+        livePoll = setInterval(async () => { // pick up fresh pushes (or an ended session) without disturbing an open detail row
+          if (gone()) { clearInterval(liveTick); clearInterval(livePoll); return; }
+          try {
+            const n = await api("GET", "/api/history" + qs({ limit: PAGE, offset: hf.offset, device: hf.device, from: dayStart(hf.from), to: dayEnd(hf.to), q: hf.q, url: hf.url }));
+            offset = n.serverNow - Date.now();
+            let rerender = false;
+            for (const it of n.items) {
+              const st = live.get(it.sessionId); if (!st) continue;
+              if (it.endTs || it.updatedAt == null) rerender = true;
+              else if (it.updatedAt > st.at) { st.at = it.updatedAt; st.base = it.watchedMs; }
+            }
+            if (rerender) renderRows(n);
+          } catch (_e) { /* transient; the ticker will drop the live state by itself */ }
+        }, POLL_MS);
+      }
       $("pPrev").onclick = () => { hf.offset = Math.max(0, hf.offset - PAGE); load(); };
       $("pNext").onclick = () => { hf.offset += PAGE; load(); };
       const toggle = tr => {
@@ -270,7 +318,13 @@
         tr.setAttribute("aria-expanded", "true");
         const it = r.items[Number(tr.dataset.i)], url = safeUrl(it.url);
         const skew = it.skewMs ? `, device clock was ${Math.abs(Math.round(it.skewMs / 60000))} min ${it.skewMs > 0 ? "behind" : "ahead"}` : "";
-        tr.insertAdjacentHTML("afterend", `<tr class="detail"><td colspan="6"><dl class="kv tr-detail-box">
+        const ev = [
+          `<li><b>Started</b><span class="num">${esc(when(it.startTs))}</span><span class="small muted">${it.startSec == null ? "start position not recorded" : "at " + clock(it.startSec * 1000) + " in the video"}</span></li>`,
+          it.seeks || it.pauses ? `<li class="gap"><b>During the session</b><span class="num">${it.seeks} seek${it.seeks === 1 ? "" : "s"} (${it.rewinds} backwards), ${it.pauses} pause${it.pauses === 1 ? "" : "s"}</span><span class="small muted">The extension records only how many, not when, from/to where, or how long a pause lasted.</span></li>` : "",
+          it.endTs ? `<li><b>Ended</b><span class="num">${esc(when(it.endTs))}</span><span class="small muted">at ${clock(it.positionSec * 1000)}, furthest ${clock(it.furthestSec * 1000)}</span></li>`
+            : `<li><b>${isLive(it) ? "Live now" : "Last update"}</b><span class="num">${it.updatedAt ? esc(when(it.updatedAt)) : "unknown"}</span><span class="small muted">${isLive(it) ? "still being watched" : "not ended cleanly, or the device has not synced since"}</span></li>`
+        ].join("");
+        tr.insertAdjacentHTML("afterend", `<tr class="detail"><td colspan="6"><ol class="tl" aria-label="Session timeline">${ev}</ol><dl class="kv tr-detail-box">
           <dt>Source device</dt><dd>${chip(it.deviceId, it.deviceLabel)}</dd>
           <dt>Video</dt><dd>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a>` : esc(it.videoId)} (${esc(it.kind)})</dd>
           <dt>Started</dt><dd class="num">${esc(when(it.startTs))}${it.endTs ? " to " + esc(when(it.endTs)) : " (still open or not ended cleanly)"}</dd>

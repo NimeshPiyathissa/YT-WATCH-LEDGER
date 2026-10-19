@@ -24,7 +24,7 @@ export default async function (app, { db, config }) {
 
   function loadItems(adminId, f) {
     const labels = Object.fromEntries(db.prepare("SELECT id,label FROM devices WHERE admin_id=?").all(adminId).map(d => [d.id, d.label || "Device"]));
-    const rows = db.prepare(`SELECT s.enc AS enc, s.device_id AS device_id FROM sessions s JOIN devices d ON d.id=s.device_id
+    const rows = db.prepare(`SELECT s.enc AS enc, s.device_id AS device_id, s.updated_at AS updated_at FROM sessions s JOIN devices d ON d.id=s.device_id
       WHERE d.admin_id=@admin AND (@device IS NULL OR s.device_id=@device) AND s.start_ts_adj>=@from AND s.start_ts_adj<=@to
       ORDER BY s.start_ts_adj DESC LIMIT ${MAX_ROWS}`).all({ admin: adminId, device: f.device, from: f.from, to: f.to });
     const items = [];
@@ -37,7 +37,8 @@ export default async function (app, { db, config }) {
         watchedMs: s.watchedMs || 0, duration: s.duration || 0,
         progress: s.duration > 0 ? Math.min(100, Math.round((s.furthestSec || 0) / s.duration * 100)) : null,
         startSec: s.startSec ?? null, positionSec: s.positionSec || 0, furthestSec: s.furthestSec || 0,
-        seeks: s.seeks || 0, rewinds: s.rewinds || 0, pauses: s.pauses || 0, completed: !!s.completed, rev: s.rev || 0
+        seeks: s.seeks || 0, rewinds: s.rewinds || 0, pauses: s.pauses || 0, completed: !!s.completed, rev: s.rev || 0,
+        updatedAt: r.updated_at // server time of the last accepted push for this session (not a device clock)
       };
       if (f.text && !(it.title.toLowerCase().includes(f.text) || it.channel.toLowerCase().includes(f.text))) continue;
       if (f.url && !it.url.toLowerCase().includes(f.url)) continue;
@@ -50,7 +51,7 @@ export default async function (app, { db, config }) {
     const f = filterOf(req.query);
     const limit = Math.min(Math.max(Number(req.query?.limit) || 100, 1), 500), offset = Math.max(Number(req.query?.offset) || 0, 0);
     const { items, truncated } = loadItems(req.admin.id, f);
-    return { total: items.length, items: items.slice(offset, offset + limit), truncated };
+    return { total: items.length, items: items.slice(offset, offset + limit), truncated, serverNow: Date.now() };
   });
 
   app.get("/api/stats", req => {
@@ -77,7 +78,7 @@ export default async function (app, { db, config }) {
         it.progress ?? "", it.completed, it.seeks, it.rewinds, it.pauses].map(cell).join(",")));
       return reply.header("Content-Type", "text/csv; charset=utf-8").header("Content-Disposition", `attachment; filename="watch-history-${stamp}.csv"`).send(lines.join("\r\n") + "\r\n");
     }
-    return reply.header("Content-Disposition", `attachment; filename="watch-history-${stamp}.json"`).send({ exportedAt: new Date().toISOString(), count: items.length, items });
+    return reply.header("Content-Disposition", `attachment; filename="watch-history-${stamp}.json"`).send({ exportedAt: new Date().toISOString(), count: items.length, items: items.map(({ updatedAt, ...rest }) => rest) });
   });
 
   /* ---- deletion of the SERVER copy (devices keep their own local data) ---- */

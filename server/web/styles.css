@@ -64,6 +64,21 @@
 .meter .track { fill: var(--sunken); } .meter .fill { fill: var(--dc, var(--accent)); }
 .prog { width: 64px; height: 6px; display: inline-block; vertical-align: middle; }
 .prog .track { fill: var(--sunken); } .prog .fill { fill: var(--accent); }
+.prog .fill { transition: none; }
+@media (prefers-reduced-motion: no-preference) { .prog .fill { transition: width .8s cubic-bezier(.22, .7, .2, 1); } }
+.live-t { font-variant-numeric: tabular-nums; }
+.rtable td[data-label="Watched"] { white-space: nowrap; }
+@media (prefers-reduced-motion: no-preference) { .pill.live .dot { animation: livepulse 1.6s ease-in-out infinite; } }
+@keyframes livepulse { 50% { opacity: .35; } }
+/* session timeline inside an expanded History row: only points the extension really records (see the note on the "during" step) */
+.tl { list-style: none; margin: 0; padding: var(--s-3) var(--s-4) 0; display: flex; flex-direction: column; }
+.tl li { position: relative; display: grid; grid-template-columns: minmax(110px, 160px) minmax(0, 1fr); gap: 2px var(--s-4); padding: 0 0 var(--s-3) var(--s-5); font-size: var(--fs-small); }
+.tl li::before { content: ""; position: absolute; left: 3px; top: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.tl li::after { content: ""; position: absolute; left: 6.5px; top: 16px; bottom: -2px; width: 1px; background: var(--line-strong); }
+.tl li:last-child::after { display: none; }
+.tl li.gap::before { background: var(--line-strong); }
+.tl li > span.small { grid-column: 2; }
+@media (max-width: 719px) { .tl { padding: var(--s-3) 0 0; } .tl li { grid-template-columns: minmax(0, 1fr); } .tl li > span.small { grid-column: 1; } }
 .cell-prog { display: inline-flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; justify-content: flex-end; }
 
 /* ---------- filters + pager ---------- */
