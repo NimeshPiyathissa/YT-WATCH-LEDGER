@@ -37,6 +37,9 @@
   .side.open { transition: transform .2s ease-out, visibility 0s; }
 }
 
+/* overview filters (Period / Device) use the display face to match the page title */
+.page-head .field, .page-head .field .input { font-family: var(--font-display); }
+
 /* ---------- device identity ---------- */
 .chip { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-caption); line-height: 1.2; padding: 3px 10px 3px 8px; border: 1px solid var(--line-strong); border-radius: var(--r-pill); max-width: 100%; overflow-wrap: anywhere; background: var(--surface); }
 .chip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--dc, var(--accent)); flex: none; }

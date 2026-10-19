@@ -190,13 +190,13 @@
   const HOW = `<ol class="steps"><li>Generate a one-time pairing code on the <b>Devices</b> page.</li><li>In the extension, open <b>Admin console</b> and enter this server's address and the code.</li><li>Check the confirmation code matches, then approve the device.</li></ol>`;
   async function pageOverview() {
     await loadDevices();
-    const from = ov.range === "0" ? "" : Date.now() - Number(ov.range) * 86400000;
+    const from = ov.range === "0" ? "" : ov.range[0] === "h" ? Date.now() - Number(ov.range.slice(1)) * 3600000 : Date.now() - Number(ov.range) * 86400000;
     const q = qs({ tz: tz(), device: ov.device, from });
     const [s, ...per] = await Promise.all([api("GET", "/api/stats" + q)].concat(devices.map(d => api("GET", "/api/stats" + qs({ tz: tz(), device: d.id })))));
     const series = devices.map((d, i) => ({ id: d.id, label: d.label || "Device", idx: colorIdx(d.id), daily: per[i].daily })).filter((x, i) => devices[i].status !== "pending");
     const max = Math.max(1, ...s.byDevice.map(d => d.totalMs));
     const approved = devices.filter(d => d.status === "active").length;
-    const filters = devices.length ? `<label class="field">Period<select class="input" id="ovRange">${[["7", "Last 7 days"], ["30", "Last 30 days"], ["90", "Last 90 days"], ["0", "All time"]].map(([v, t]) => `<option value="${v}"${v === ov.range ? " selected" : ""}>${t}</option>`).join("")}</select></label>
+    const filters = devices.length ? `<label class="field">Period<select class="input" id="ovRange">${[["1", "Last 1 day"]].concat(Array.from({ length: 24 }, (_, i) => ["h" + (i + 1), "Last " + (i + 1) + (i ? " hours" : " hour")]), [["7", "Last 7 days"], ["30", "Last 30 days"], ["90", "Last 90 days"], ["0", "All time"]]).map(([v, t]) => `<option value="${v}"${v === ov.range ? " selected" : ""}>${t}</option>`).join("")}</select></label>
         <label class="field">Device${deviceSelect("ovDev", ov.device)}</label>` : "";
     const lede = devices.length ? `${approved} approved device${approved === 1 ? "" : "s"} syncing into this one ledger.` : "Watch time from every device you approve is collected here.";
     app.innerHTML = head("Overview", lede, filters) + (!devices.length ? `<section class="card">${empty("monitor-smartphone", "No devices paired yet", "Pair a laptop and its YouTube watch time starts building your ledger. Nothing is uploaded until you approve the device.", `<a class="btn btn-accent" href="#/devices">${ic("plus")}Add your first device</a>`)}<div class="note">${HOW}</div></section>` : `
