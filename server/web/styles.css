@@ -1,13 +1,13 @@
 /* Watch Ledger — page frame and page-specific layout. All tokens and components (buttons, cards, tables, pills,
    empty states…) come from vendor/theme.css, the shared design system; this file only adds what is specific to the
    dashboard. No inline styles anywhere (the CSP forbids them): colour and size are classes or SVG attributes. */
-:root { --side-w: 248px; --panel: #0c1c1a; --panel-text: #e6f1ee; --panel-muted: #9bb3ae; }
+:root { --side-w: 248px; --main-max: 1600px; --panel: #0c1c1a; --panel-text: #e6f1ee; --panel-muted: #9bb3ae; }
 
 /* ---------- frame: fixed sidebar ≥ 960px, top bar + slide-over drawer below ---------- */
-.shell { display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); min-height: 100vh; }
+.shell { display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); min-height: 100vh; min-height: 100dvh; }
 .topbar { display: none; }
 .scrim { display: none; }
-.side { background: var(--surface); border-right: 1px solid var(--line); padding: var(--s-4) var(--s-3); display: flex; flex-direction: column; gap: var(--s-5); position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.side { background: var(--surface); border-right: 1px solid var(--line); padding: var(--s-4) var(--s-3); display: flex; flex-direction: column; gap: var(--s-5); position: sticky; top: 0; height: 100vh; height: 100dvh; overflow-y: auto; }
 .side .brand-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); padding: var(--s-2) var(--s-2) 0; }
 .chip-private { font: 500 11px/1 var(--font-body); color: var(--text-3); border: 1px solid var(--line-strong); border-radius: var(--r-pill); padding: 3px 8px; }
 .side nav { display: flex; flex-direction: column; gap: 2px; }
@@ -17,7 +17,9 @@
 .side nav a.active { background: var(--accent-soft); color: var(--accent); }
 .side-foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--s-2); padding-top: var(--s-4); border-top: 1px solid var(--line); }
 .side-foot .field { gap: 4px; }
-.main { padding: var(--s-5) var(--s-4) var(--s-7); width: 100%; max-width: 1180px; min-width: 0; outline: none; display: flex; flex-direction: column; gap: var(--s-5); align-self: start; }
+.main { padding: var(--s-5) var(--s-4) var(--s-7); width: 100%; max-width: var(--main-max); margin-inline: auto; min-width: 0; outline: none; display: flex; flex-direction: column; gap: var(--s-5); align-self: stretch; }
+/* wide screens: the column fills the space beside the sidebar up to --main-max, then centres (balanced margins) */
+#list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); }
 @media (min-width: 960px) { .main { padding: var(--s-6) clamp(24px, 4vw, 48px) 64px; } }
 
 @media (max-width: 959px) {
