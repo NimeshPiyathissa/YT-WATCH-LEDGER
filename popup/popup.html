@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Watch Tracker</title>
+  <script src="../lib/theme-init.js"></script>
+  <link rel="stylesheet" href="../lib/theme.css" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header class="top"><b>Watch Tracker</b><span id="state" class="pill off"><span class="dot"></span><span>Off</span></span></header>
+  <div class="card tiles">
+    <div><div class="muted">Today</div><div class="big num" id="today">—</div></div>
+    <div><div class="muted">Last 7 days</div><div class="big num" id="week">—</div></div>
+  </div>
+  <p class="muted note" id="localNote">Tracking YouTube watch time on this device only.</p>
+  <p class="sync-note" id="syncNote" hidden></p>
+  <div class="actions">
+    <button class="btn btn-accent" id="openDash">Dashboard</button>
+    <button class="btn" id="openSettings">Settings</button>
+    <button class="btn" id="openAdmin">Admin console</button>
+  </div>
+  <script src="../lib/util.js"></script>
+  <script src="../lib/accounting.js"></script>
+  <script src="../lib/db.js"></script>
+  <script src="../lib/stats.js"></script>
+  <script src="../lib/sync.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

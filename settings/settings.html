@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Watch Tracker — Settings</title>
+  <script src="../lib/theme-init.js"></script>
+  <link rel="stylesheet" href="../lib/theme.css" />
+  <link rel="stylesheet" href="../admin/admin.css" />
+</head>
+<body>
+  <div id="lockGate" class="lock" hidden>
+    <div class="lock-card card">
+      <img src="../icons/icon48.png" width="40" height="40" alt="" />
+      <h2>Settings are locked</h2>
+      <input type="password" id="lockInput" class="input" placeholder="Admin password" />
+      <div id="lockError" class="lock-error" hidden>Incorrect password.</div>
+      <button class="btn btn-accent" id="lockUnlock">Unlock</button>
+    </div>
+  </div>
+  <div id="app" class="admin" hidden>
+    <header class="admin-head"><div><h1>Settings</h1></div><a id="toAdmin" href="#">Admin console →</a></header>
+    <p class="sync-note" id="syncNote" hidden></p>
+    <section class="card controls">
+      <div class="ctl-row"><div><b>Tracking</b></div><label class="switch"><input type="checkbox" id="trackToggle"><span class="slider"></span></label></div>
+      <div class="ctl-row"><div><b>Keep history for</b></div>
+        <select id="retentionSel" class="input compact">
+          <option value="0">Forever</option><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="180">180 days</option>
+        </select></div>
+      <div class="ctl-row"><div><b>Theme</b></div>
+        <select id="themeSel" class="input compact"><option value="auto">System</option><option value="dark">Dark</option><option value="light">Light</option></select></div>
+    </section>
+    <section class="card">
+      <h3>Admin password</h3>
+      <p class="muted" id="pwState"></p>
+      <div class="lock-note">A password only hides the admin pages. Local data remains readable with developer tools and the extension can be removed from <code>chrome://extensions</code>. Convenience lock, not strong security.</div>
+      <div class="data-actions"><button class="btn" id="setPw">Set / change</button><button class="btn btn-danger" id="removePw" hidden>Remove</button></div>
+      <div id="pwForm" class="pw-form" hidden></div>
+    </section>
+  </div>
+  <div id="toast" class="toast" hidden></div>
+  <script src="../lib/lock.js"></script>
+  <script src="../lib/sync.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

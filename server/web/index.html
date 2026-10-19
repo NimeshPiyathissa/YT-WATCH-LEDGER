@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Watch Ledger</title>
+  <script src="vendor/theme-init.js"></script>
+  <link rel="stylesheet" href="vendor/theme.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="shell" id="shell" hidden>
+    <aside class="side">
+      <div class="brand"><span class="mark" aria-hidden="true"></span><b>Watch Ledger</b><span class="muted small">private</span></div>
+      <nav id="nav" aria-label="Sections">
+        <a href="#/overview" data-nav="overview">Overview</a>
+        <a href="#/history" data-nav="history">History</a>
+        <a href="#/devices" data-nav="devices">Devices <span class="badge" id="pendingBadge" hidden></span></a>
+        <a href="#/data" data-nav="data">Data &amp; backups</a>
+        <a href="#/audit" data-nav="audit">Audit log</a>
+      </nav>
+      <div class="side-foot">
+        <select id="themeSel" class="input compact" aria-label="Theme"><option value="auto">System theme</option><option value="dark">Dark</option><option value="light">Light</option></select>
+        <button class="btn" id="logout">Sign out</button>
+      </div>
+    </aside>
+    <main id="app" class="main" tabindex="-1"></main>
+  </div>
+  <main id="login" class="login" hidden></main>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script src="vendor/util.js"></script>
+  <script src="vendor/charts.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

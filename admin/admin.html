@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Watch Tracker — Admin console</title>
+  <script src="../lib/theme-init.js"></script>
+  <link rel="stylesheet" href="../lib/theme.css" />
+  <link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+  <!-- lock gate (shared) -->
+  <div id="lockGate" class="lock" hidden>
+    <div class="lock-card card">
+      <img src="../icons/icon48.png" width="40" height="40" alt="" />
+      <h2>Admin console is locked</h2>
+      <p class="muted">Enter the admin password.</p>
+      <input type="password" id="lockInput" class="input" placeholder="Admin password" />
+      <div id="lockError" class="lock-error" hidden>Incorrect password.</div>
+      <button class="btn btn-accent" id="lockUnlock">Unlock</button>
+    </div>
+  </div>
+
+  <div id="app" class="admin" hidden>
+    <header class="admin-head">
+      <div><h1>Admin console</h1><p class="muted">Controls for this browser.</p></div>
+      <span id="livePill" class="pill off"><span class="dot"></span><span>Idle</span></span>
+    </header>
+
+    <section class="card" id="identity">
+      <h3>This install</h3>
+      <div class="kv-grid" id="identityGrid"></div>
+    </section>
+
+    <section class="card controls">
+      <h3>Controls</h3>
+      <div class="ctl-row"><div><b>Tracking</b><p class="muted">Record or pause recording.</p></div>
+        <label class="switch"><input type="checkbox" id="trackToggle"><span class="slider"></span></label></div>
+      <div class="ctl-row"><div><b>Keep history for</b></div>
+        <select id="retentionSel" class="input compact">
+          <option value="0">Forever</option><option value="7">7 days</option>
+          <option value="30">30 days</option><option value="90">90 days</option><option value="180">180 days</option>
+        </select></div>
+      <div class="ctl-row"><div><b>Theme</b></div>
+        <select id="themeSel" class="input compact"><option value="auto">System</option><option value="dark">Dark</option><option value="light">Light</option></select></div>
+    </section>
+
+    <section class="card">
+      <h3>Data</h3>
+      <div class="data-actions">
+        <button class="btn" id="exportAll">Export all (JSON)</button>
+        <button class="btn" id="exportRange">Export date range…</button>
+        <button class="btn" id="exportChannel">Export channel…</button>
+      </div>
+      <div class="data-actions" style="margin-top:10px">
+        <button class="btn btn-danger" id="delRange">Delete date range…</button>
+        <button class="btn btn-danger" id="delChannel">Delete channel…</button>
+        <button class="btn btn-danger" id="delAll">Delete all</button>
+      </div>
+      <div id="dataForm" class="data-form" hidden></div>
+    </section>
+
+    <!-- PART B injects an "Remote sync / enrollment" section here (id="remoteSection") -->
+    <section class="card" id="remoteSection" hidden></section>
+
+    <section class="card">
+      <h3>Admin password</h3>
+      <p class="muted" id="pwState"></p>
+      <div class="lock-note">A password only hides the admin pages. Local data remains readable with developer tools and the extension can be removed from <code>chrome://extensions</code>. Convenience lock, not strong security.</div>
+      <div class="data-actions">
+        <button class="btn" id="setPw">Set / change</button>
+        <button class="btn btn-danger" id="removePw" hidden>Remove</button>
+      </div>
+      <div id="pwForm" class="pw-form" hidden></div>
+    </section>
+
+    <section class="card">
+      <h3>Diagnostics</h3>
+      <div class="data-actions"><button class="btn" id="copyDiag">Copy log</button><button class="btn" id="clearDiag">Clear</button></div>
+      <pre id="diagLog" class="diag"></pre>
+    </section>
+
+    <footer class="foot muted">Local admin · opens the dashboard for viewing ·
+      <a id="toDash" href="#">Open dashboard</a></footer>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="../lib/util.js"></script>
+  <script src="../lib/db.js"></script>
+  <script src="../lib/lock.js"></script>
+  <script src="../lib/diag.js"></script>
+  <script src="../lib/sync.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

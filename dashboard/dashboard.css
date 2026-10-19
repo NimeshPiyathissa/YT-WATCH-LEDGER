@@ -1,0 +1,6 @@
+.wrap { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.tiles .card { margin: 6px 0; }
+.big { font-size: 22px; font-weight: 600; }
+td img { width: 64px; border-radius: 4px; vertical-align: middle; margin-right: 8px; }
+#search { margin-bottom: 10px; }

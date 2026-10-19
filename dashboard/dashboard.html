@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Watch Tracker — Dashboard</title>
+  <script src="../lib/theme-init.js"></script>
+  <link rel="stylesheet" href="../lib/theme.css" />
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+  <main class="wrap">
+    <h1>Dashboard</h1>
+    <p class="muted">YouTube watch time recorded on this device.</p>
+    <div class="tiles">
+      <div class="card"><div class="muted">Today</div><div class="big num" id="tToday">—</div></div>
+      <div class="card"><div class="muted">Last 7 days</div><div class="big num" id="tWeek">—</div></div>
+      <div class="card"><div class="muted">All time</div><div class="big num" id="tAll">—</div></div>
+      <div class="card"><div class="muted">Videos</div><div class="big num" id="tVideos">—</div></div>
+    </div>
+    <section class="card"><h3>Last 14 days</h3><div id="chart"></div></section>
+    <section class="card"><h3>Top channels</h3><div id="channels"></div></section>
+    <section class="card">
+      <h3>History</h3>
+      <input class="input" id="search" placeholder="Search title or channel" />
+      <table><thead><tr><th>Video</th><th>Channel</th><th>Watched</th><th>Last</th></tr></thead><tbody id="rows"></tbody></table>
+    </section>
+  </main>
+  <script src="../lib/util.js"></script>
+  <script src="../lib/accounting.js"></script>
+  <script src="../lib/db.js"></script>
+  <script src="../lib/stats.js"></script>
+  <script src="../lib/charts.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>
