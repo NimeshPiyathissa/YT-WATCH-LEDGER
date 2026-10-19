@@ -17,16 +17,17 @@
     const S=window.YTSync, c=await S.cfg(), esc=U.escapeHtml;
     if(!S.isEnrolled(c)){
       el.innerHTML=
-        `<h3>Private sync <span class="muted">— off</span></h3>
+        `<div class="card-head"><h3>Private sync</h3><span class="pill off"><span class="dot"></span><span>Off</span></span></div>
+         <div class="stack">
          <p class="muted">By default everything stays on this device. Pairing sends this browser's YouTube watch history (video titles, channels, watch times and progress) to your own private server. You get a one-time pairing code from the server's dashboard (Devices → Add device); after pairing, the owner must approve this device there before anything is sent. The owner can also remotely pause tracking, change retention, or delete data stored here.</p>
          ${c.sync_notice?`<div class="sync-warn">${esc(c.sync_notice)} <a href="#" id="rmDismiss">Dismiss</a></div>`:""}
          <div class="pw-form">
-           <input class="input" id="rmServer" placeholder="Server address, e.g. https://tracker.example.com" />
-           <input class="input" id="rmCode" placeholder="Pairing code" autocomplete="off" />
-           <label class="muted"><input type="checkbox" id="rmHist" /> Also upload history already recorded on this device (queued only after you are paired)</label>
-           <div class="lock-error" id="rmErr" hidden></div>
+           <label class="field">Server address<input class="input" id="rmServer" placeholder="https://tracker.example.com" /></label>
+           <label class="field">Pairing code<input class="input" id="rmCode" placeholder="One-time code from the dashboard" autocomplete="off" /></label>
+           <label class="check"><input type="checkbox" id="rmHist" /> <span>Also upload history already recorded on this device (queued only after you are paired)</span></label>
+           <div class="lock-error" id="rmErr" role="alert" hidden></div>
            <div class="data-actions"><button class="btn btn-accent" id="rmEnroll">Pair this device</button></div>
-         </div>`;
+         </div></div>`;
       const q=id=>el.querySelector("#"+id), fail=m=>{q("rmErr").textContent=m;q("rmErr").hidden=false;};
       if(q("rmDismiss")) q("rmDismiss").onclick=async e=>{e.preventDefault();await L.setCfg({sync_notice:""});};
       q("rmEnroll").onclick=async()=>{
@@ -56,11 +57,14 @@
       ["Last remote command",cmd?cmd.type+" · "+U.fmtDateTime(cmd.t):"None"]
     ];
     el.innerHTML=
-      `<h3>Private sync <span class="pill ${waiting?"off":"on"}"><span class="dot"></span><span>${waiting?"Pending approval":"Paired"}</span></span></h3>
+      `<div class="card-head"><h3>Private sync</h3><span class="pill ${waiting?"warn":"on"}"><span class="dot"></span><span>${waiting?"Pending approval":"Paired"}</span></span></div>
+       <div class="stack">
        <div class="sync-note">${esc(S.syncNoticeText(c))}${waiting?" Check that the code below matches the one shown in your dashboard, then approve this device there.":""}</div>
-       <div class="kv-grid">${rows.map(r=>`<div class="k muted">${r[0]}</div><div class="v num">${esc(r[1])}</div>`).join("")}</div>
+       <div class="kv-grid">${rows.map(r=>`<div class="k">${r[0]}</div><div class="v num">${esc(r[1])}</div>`).join("")}</div>
        <p class="muted">Data already sent stays on your server until you delete it there. Unpairing stops all further sending and discards anything still queued on this device.</p>
-       <div class="data-actions"><button class="btn" id="rmNow">Sync now</button><button class="btn btn-danger" id="rmOut">Unpair</button></div>`;
+       <div class="data-actions"><button class="btn" id="rmNow"><span data-icon="refresh-cw"></span>Sync now</button><button class="btn btn-danger" id="rmOut"><span data-icon="unlink"></span>Unpair</button></div>
+       </div>`;
+    window.YTIcons.hydrate(el);
     el.querySelector("#rmNow").onclick=()=>chrome.runtime.sendMessage({type:"SYNC_NOW"},r=>{void chrome.runtime.lastError;toast(r&&r.error?"Sync failed":"Sync requested");renderDiag();});
     const out=el.querySelector("#rmOut"); let armed=false;
     out.onclick=async()=>{
@@ -97,7 +101,7 @@
       ["Last activity",cfg.last_activity?U.fmtDateTime(cfg.last_activity):"None"],
       ["Storage used (approx.)",storage]
     ];
-    $("identityGrid").innerHTML=rows.map(r=>`<div class="k muted">${r[0]}</div><div class="v num">${U.escapeHtml(r[1])}</div>`).join("");
+    $("identityGrid").innerHTML=rows.map(r=>`<div class="k">${r[0]}</div><div class="v num">${U.escapeHtml(r[1])}</div>`).join("");
   }
 
   async function renderLive(){
@@ -199,5 +203,11 @@
   }
   function pwForm(hasPw,remove,done){ L.renderPwForm($("pwForm"),hasPw,remove,done); }
 
-  async function renderDiag(){const l=await D.read();$("diagLog").textContent=l.slice(-80).map(e=>new Date(e.t).toLocaleTimeString()+" ["+e.level+"] "+e.msg+(e.extra?" "+JSON.stringify(e.extra):"")).join("\n")||"(empty)";}
+  // One row per entry: time · level · message, with any extra data underneath. Newest last, scrolled into view.
+  async function renderDiag(){
+    const l=(await D.read()).slice(-80), esc=U.escapeHtml, box=$("diagLog");
+    const pill={info:"info",warn:"warn",error:"bad"};
+    box.innerHTML=l.map(e=>`<div class="log-row ${esc(e.level)}"><time datetime="${new Date(e.t).toISOString()}">${esc(new Date(e.t).toLocaleTimeString())}</time><span class="pill ${pill[e.level]||"off"}">${esc(e.level)}</span><span class="msg">${esc(e.msg)}</span>${e.extra?`<span class="extra">${esc(JSON.stringify(e.extra))}</span>`:""}</div>`).join("")||'<div class="log-empty">No events recorded yet.</div>';
+    box.scrollTop=box.scrollHeight;
+  }
 })();

@@ -4,30 +4,42 @@
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex, nofollow" />
   <title>Watch Ledger</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <script src="vendor/theme-init.js"></script>
+  <link rel="preload" href="vendor/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="vendor/fonts/bricolage-grotesque-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="vendor/theme.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="shell" id="shell" hidden>
-    <aside class="side">
-      <div class="brand"><span class="mark" aria-hidden="true"></span><b>Watch Ledger</b><span class="muted small">private</span></div>
+    <header class="topbar">
+      <button class="btn btn-ghost btn-icon" id="menuBtn" type="button" aria-label="Open menu" aria-controls="side" aria-expanded="false"><span data-icon="menu"></span></button>
+      <a class="brand" href="#/overview"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>Watch Ledger</a>
+    </header>
+    <div class="scrim" id="scrim" hidden></div>
+    <aside class="side" id="side">
+      <div class="brand-row">
+        <a class="brand" href="#/overview"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>Watch Ledger</a>
+        <span class="chip-private">private</span>
+      </div>
       <nav id="nav" aria-label="Sections">
-        <a href="#/overview" data-nav="overview">Overview</a>
-        <a href="#/history" data-nav="history">History</a>
-        <a href="#/devices" data-nav="devices">Devices <span class="badge" id="pendingBadge" hidden></span></a>
-        <a href="#/data" data-nav="data">Data &amp; backups</a>
-        <a href="#/audit" data-nav="audit">Audit log</a>
+        <a href="#/overview" data-nav="overview"><span data-icon="layout-dashboard"></span>Overview</a>
+        <a href="#/history" data-nav="history"><span data-icon="history"></span>History</a>
+        <a href="#/devices" data-nav="devices"><span data-icon="monitor-smartphone"></span>Devices <span class="badge" id="pendingBadge" hidden></span></a>
+        <a href="#/data" data-nav="data"><span data-icon="database"></span>Data &amp; backups</a>
+        <a href="#/audit" data-nav="audit"><span data-icon="scroll-text"></span>Audit log</a>
       </nav>
       <div class="side-foot">
-        <select id="themeSel" class="input compact" aria-label="Theme"><option value="auto">System theme</option><option value="dark">Dark</option><option value="light">Light</option></select>
-        <button class="btn" id="logout">Sign out</button>
+        <label class="field">Theme<select id="themeSel" class="input" aria-label="Theme"><option value="auto">System</option><option value="dark">Dark</option><option value="light">Light</option></select></label>
+        <button class="btn" id="logout" type="button"><span data-icon="log-out"></span>Sign out</button>
       </div>
     </aside>
     <main id="app" class="main" tabindex="-1"></main>
   </div>
   <main id="login" class="login" hidden></main>
   <div id="toast" class="toast" role="status" hidden></div>
+  <script src="vendor/icons.js"></script>
   <script src="vendor/util.js"></script>
   <script src="vendor/charts.js"></script>
   <script src="app.js"></script>

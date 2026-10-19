@@ -4,8 +4,10 @@
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Watch Tracker — Admin console</title>
   <script src="../lib/theme-init.js"></script>
+  <link rel="preload" href="../lib/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="../lib/fonts/bricolage-grotesque-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="../lib/theme.css" />
-  <link rel="stylesheet" href="admin.css" />
+  <link rel="stylesheet" href="../lib/shell.css" />
 </head>
 <body>
   <!-- lock gate (shared) -->
@@ -14,77 +16,96 @@
       <img src="../icons/icon48.png" width="40" height="40" alt="" />
       <h2>Admin console is locked</h2>
       <p class="muted">Enter the admin password.</p>
-      <input type="password" id="lockInput" class="input" placeholder="Admin password" />
-      <div id="lockError" class="lock-error" hidden>Incorrect password.</div>
+      <input type="password" id="lockInput" class="input" placeholder="Admin password" aria-label="Admin password" />
+      <div id="lockError" class="lock-error" role="alert" hidden>Incorrect password.</div>
       <button class="btn btn-accent" id="lockUnlock">Unlock</button>
     </div>
   </div>
 
-  <div id="app" class="admin" hidden>
-    <header class="admin-head">
-      <div><h1>Admin console</h1><p class="muted">Controls for this browser.</p></div>
-      <span id="livePill" class="pill off"><span class="dot"></span><span>Idle</span></span>
-    </header>
+  <div id="app" hidden>
+    <header class="appbar"><div class="appbar-in">
+      <span class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>Watch Tracker</span>
+      <nav class="appnav" aria-label="Pages">
+        <a href="../dashboard/dashboard.html"><span data-icon="layout-dashboard"></span><span class="label">Dashboard</span></a>
+        <a href="../settings/settings.html"><span data-icon="settings"></span><span class="label">Settings</span></a>
+        <a href="admin.html" aria-current="page"><span data-icon="sliders-horizontal"></span><span class="label">Admin</span></a>
+      </nav>
+    </div></header>
 
-    <section class="card" id="identity">
-      <h3>This install</h3>
-      <div class="kv-grid" id="identityGrid"></div>
-    </section>
-
-    <section class="card controls">
-      <h3>Controls</h3>
-      <div class="ctl-row"><div><b>Tracking</b><p class="muted">Record or pause recording.</p></div>
-        <label class="switch"><input type="checkbox" id="trackToggle"><span class="slider"></span></label></div>
-      <div class="ctl-row"><div><b>Keep history for</b></div>
-        <select id="retentionSel" class="input compact">
-          <option value="0">Forever</option><option value="7">7 days</option>
-          <option value="30">30 days</option><option value="90">90 days</option><option value="180">180 days</option>
-        </select></div>
-      <div class="ctl-row"><div><b>Theme</b></div>
-        <select id="themeSel" class="input compact"><option value="auto">System</option><option value="dark">Dark</option><option value="light">Light</option></select></div>
-    </section>
-
-    <section class="card">
-      <h3>Data</h3>
-      <div class="data-actions">
-        <button class="btn" id="exportAll">Export all (JSON)</button>
-        <button class="btn" id="exportRange">Export date range…</button>
-        <button class="btn" id="exportChannel">Export channel…</button>
+    <main class="page narrow">
+      <div class="page-head">
+        <div><h1>Admin console</h1><p class="lede">Controls for this browser.</p></div>
+        <span id="livePill" class="pill off"><span class="dot"></span><span>Idle</span></span>
       </div>
-      <div class="data-actions" style="margin-top:10px">
-        <button class="btn btn-danger" id="delRange">Delete date range…</button>
-        <button class="btn btn-danger" id="delChannel">Delete channel…</button>
-        <button class="btn btn-danger" id="delAll">Delete all</button>
-      </div>
-      <div id="dataForm" class="data-form" hidden></div>
-    </section>
 
-    <!-- PART B injects an "Remote sync / enrollment" section here (id="remoteSection") -->
-    <section class="card" id="remoteSection" hidden></section>
+      <section class="card" id="identity">
+        <div class="card-head"><h3>This install</h3></div>
+        <div class="kv-grid" id="identityGrid"></div>
+      </section>
 
-    <section class="card">
-      <h3>Admin password</h3>
-      <p class="muted" id="pwState"></p>
-      <div class="lock-note">A password only hides the admin pages. Local data remains readable with developer tools and the extension can be removed from <code>chrome://extensions</code>. Convenience lock, not strong security.</div>
-      <div class="data-actions">
-        <button class="btn" id="setPw">Set / change</button>
-        <button class="btn btn-danger" id="removePw" hidden>Remove</button>
-      </div>
-      <div id="pwForm" class="pw-form" hidden></div>
-    </section>
+      <section class="card controls">
+        <div class="card-head"><h3>Controls</h3></div>
+        <div class="setting"><div class="what"><b>Tracking</b><span>Record or pause recording.</span></div>
+          <label class="switch"><input type="checkbox" id="trackToggle" aria-label="Tracking"><span class="slider"></span></label></div>
+        <div class="setting"><div class="what"><b>Keep history for</b><span>Older videos and sessions are deleted automatically.</span></div>
+          <select id="retentionSel" class="input compact" aria-label="Keep history for">
+            <option value="0">Forever</option><option value="7">7 days</option>
+            <option value="30">30 days</option><option value="90">90 days</option><option value="180">180 days</option>
+          </select></div>
+        <div class="setting"><div class="what"><b>Theme</b><span>Follow your system, or pick one.</span></div>
+          <select id="themeSel" class="input compact" aria-label="Theme"><option value="auto">System</option><option value="dark">Dark</option><option value="light">Light</option></select></div>
+      </section>
 
-    <section class="card">
-      <h3>Diagnostics</h3>
-      <div class="data-actions"><button class="btn" id="copyDiag">Copy log</button><button class="btn" id="clearDiag">Clear</button></div>
-      <pre id="diagLog" class="diag"></pre>
-    </section>
+      <section class="card">
+        <div class="card-head"><h3>Data</h3></div>
+        <div class="group">
+          <span class="eyebrow">Export</span>
+          <div class="data-actions">
+            <button class="btn" id="exportAll"><span data-icon="download"></span>Export all (JSON)</button>
+            <button class="btn" id="exportRange"><span data-icon="calendar"></span>Export date range…</button>
+            <button class="btn" id="exportChannel"><span data-icon="film"></span>Export channel…</button>
+          </div>
+        </div>
+        <div class="group">
+          <span class="eyebrow">Delete from this device</span>
+          <div class="data-actions">
+            <button class="btn btn-danger" id="delRange"><span data-icon="trash-2"></span>Delete date range…</button>
+            <button class="btn btn-danger" id="delChannel"><span data-icon="trash-2"></span>Delete channel…</button>
+            <button class="btn btn-danger" id="delAll"><span data-icon="trash-2"></span>Delete all</button>
+          </div>
+        </div>
+        <div id="dataForm" class="data-form" hidden></div>
+      </section>
 
-    <footer class="foot muted">Local admin · opens the dashboard for viewing ·
-      <a id="toDash" href="#">Open dashboard</a></footer>
+      <!-- PART B injects an "Remote sync / enrollment" section here (id="remoteSection") -->
+      <section class="card" id="remoteSection" hidden></section>
+
+      <section class="card">
+        <div class="card-head"><h3>Admin password</h3></div>
+        <div class="stack">
+          <p class="muted" id="pwState"></p>
+          <p class="lock-note">A password only hides the admin pages. Local data remains readable with developer tools and the extension can be removed from <code>chrome://extensions</code>. Convenience lock, not strong security.</p>
+          <div class="data-actions">
+            <button class="btn" id="setPw">Set / change</button>
+            <button class="btn btn-danger" id="removePw" hidden>Remove</button>
+          </div>
+          <div id="pwForm" class="pw-form" hidden></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h3>Diagnostics <span class="sub">most recent 80 events</span></h3>
+          <div class="data-actions"><button class="btn btn-sm" id="copyDiag"><span data-icon="copy"></span>Copy log</button><button class="btn btn-sm" id="clearDiag"><span data-icon="eraser"></span>Clear</button></div></div>
+        <div id="diagLog" class="log" role="log" aria-label="Diagnostics log"></div>
+      </section>
+
+      <footer class="foot">Local admin · <a id="toDash" href="#">Open dashboard</a></footer>
+    </main>
   </div>
 
-  <div id="toast" class="toast" hidden></div>
+  <div id="toast" class="toast" role="status" hidden></div>
 
+  <script src="../lib/icons.js"></script>
   <script src="../lib/util.js"></script>
   <script src="../lib/db.js"></script>
   <script src="../lib/lock.js"></script>
