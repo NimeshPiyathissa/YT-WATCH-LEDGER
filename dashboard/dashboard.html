@@ -16,7 +16,7 @@
     <nav class="appnav" aria-label="Pages">
       <a href="dashboard.html" aria-current="page"><span data-icon="layout-dashboard"></span><span class="label">Dashboard</span></a>
       <a href="../settings/settings.html"><span data-icon="settings"></span><span class="label">Settings</span></a>
-      <a href="../admin/admin.html"><span data-icon="sliders-horizontal"></span><span class="label">Admin</span></a>
+      <a href="../admin/admin.html"><span data-icon="laptop"></span><span class="label">Device</span></a>
     </nav>
   </div></header>
   <main class="page">
@@ -36,6 +36,15 @@
         <div class="searchbox"><span data-icon="search"></span><input class="input" id="search" type="search" placeholder="Search title or channel" aria-label="Search title or channel" /></div></div>
       <table class="table rtable" id="histTable"><thead><tr><th>Video</th><th>Channel</th><th class="right">Watched</th><th class="right">Last watched</th></tr></thead><tbody id="rows"></tbody></table>
       <div id="histEmpty" class="empty" hidden></div>
+    </section>
+    <section class="card" id="yourData" aria-labelledby="yourDataT">
+      <div class="card-head"><h3 id="yourDataT">Your data</h3><span class="sub">Yours to review, copy or delete at any time</span></div>
+      <p class="muted">The history above is stored in this browser. Deleting it here removes it from this device only: anything already uploaded to a server stays there until the administrator deletes it.</p>
+      <div class="group"><span class="eyebrow">Export</span>
+        <div class="data-actions"><button class="btn" id="exportAll" type="button"><span data-icon="download"></span>Export all (JSON)</button><button class="btn" id="exportRange" type="button"><span data-icon="calendar"></span>Export date range…</button></div></div>
+      <div class="group"><span class="eyebrow">Delete from this device</span>
+        <div class="data-actions"><button class="btn btn-danger" id="delRange" type="button"><span data-icon="trash-2"></span>Delete date range…</button><button class="btn btn-danger" id="delChannel" type="button"><span data-icon="trash-2"></span>Delete channel…</button><button class="btn btn-danger" id="delAll" type="button"><span data-icon="trash-2"></span>Delete all</button></div></div>
+      <div id="dataForm" class="data-form" hidden></div>
     </section>
   </main>
   <script src="../lib/icons.js"></script>

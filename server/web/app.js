@@ -556,9 +556,14 @@
     const active = dev.status === "active", dis = active ? "" : "disabled";
     app.innerHTML = `<div><a class="back" href="#/devices">${ic("arrow-left")}Devices</a></div>
       ${head(`<span class="row">${esc(dev.label || "Device")} ${pill(syncState(dev))}</span>`, "Commands wait on the server and are applied the next time the extension syncs (within about five minutes). They are visible on the device. They change data stored <b>on that laptop</b>; to delete what is stored on this server use <a href=\"#/data\">Data &amp; backups</a>.")}
+      <section class="card stack" id="cfgCard" aria-labelledby="cfgT"><div class="card-head"><h3 id="cfgT">${ic("sliders-horizontal")}Configuration</h3><span id="cfgState"></span></div>
+        <p class="muted">Settings the extension applies on this device. It checks every value and reports back; an offline device picks them up when it reconnects. These settings cannot turn tracking on or off or change what is collected, and the person using the browser can still pause tracking, delete their data or remove the extension.</p>
+        <div class="filters"><label class="field">Keep history for<select class="input" id="cfgRet"><option value="">Device's own setting</option><option value="0">Forever</option>${[7, 30, 90, 180, 365, 730].map(n => `<option value="${n}">${n} days</option>`).join("")}</select></label>
+          <label class="field">Sync every<select class="input" id="cfgSync"><option value="">Device default (5 min)</option>${[5, 10, 15, 30, 60].map(n => `<option value="${n}">${n} minutes</option>`).join("")}</select></label></div>
+        <div class="row"><button class="btn btn-accent" id="cfgSave" type="button" ${dis}>${ic("check")}Save changes</button><span class="caption" id="cfgMsg" role="status"></span></div>
+        <div id="cfgHist"></div></section>
       <section class="card stack"><div class="card-head"><h3>Controls</h3></div>
         <div class="group-row stack-sm"><span class="eyebrow">Tracking</span><div class="row"><button class="btn" data-cmd="pause_tracking" type="button" ${dis}>${ic("pause")}Pause tracking</button><button class="btn" data-cmd="resume_tracking" type="button" ${dis}>${ic("play")}Resume tracking</button></div></div>
-        <div class="group-row stack-sm"><span class="eyebrow">Retention on the device</span><div class="row"><select class="input compact" id="retSel" aria-label="Retention on device"><option value="0">Keep forever</option><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="180">180 days</option></select><button class="btn" id="retGo" type="button" ${dis}>Set retention on device</button></div></div>
         <div class="group-row stack-sm"><span class="eyebrow">Delete data on the device</span><div class="row"><label class="field">From<input type="date" class="input" id="dFrom" /></label><label class="field">To<input type="date" class="input" id="dTo" /></label></div>
           <div class="row"><button class="btn btn-danger" id="dRange" type="button" ${dis}>${ic("trash-2")}Delete range on device</button><button class="btn btn-danger" id="dAll" type="button" ${dis}>${ic("trash-2")}Delete all on device</button></div></div>
         ${active ? "" : '<p class="note">Only approved, non-revoked devices can receive commands.</p>'}<div class="err" id="cErr" role="alert" hidden></div></section>
@@ -566,13 +571,50 @@
         ${commands.map(c => `<tr><td data-primary><span class="cell-primary mono">${esc(c.type)}</span> <span class="cell-sub">${esc(Object.keys(c.payload).length ? JSON.stringify(c.payload) : "")}</span></td><td data-label="Status">${esc(c.status)}</td><td class="num" data-label="Queued">${esc(when(c.created_at))}</td><td data-label="Result">${esc(c.result ? c.result.status + (c.result.error ? ": " + c.result.error : "") : "waiting")}</td></tr>`).join("")}</tbody></table>` : empty("terminal", "No commands yet", "Commands you send to this device are listed here with their result.")}</section>`;
     const send = guarded(async (type, payload) => { await api("POST", `/api/devices/${id}/commands`, { type, payload }); toast("Queued. It applies on the device's next sync."); await pageDevice(id); });
     app.querySelectorAll("[data-cmd]").forEach(b => b.onclick = () => send(b.dataset.cmd, {}));
-    $("retSel").value = String(dev.retention_days || 0);
-    $("retGo").onclick = () => send("set_retention", { days: Number($("retSel").value) });
+    setupConfig(id, active);
     twoStep($("dAll"), "Click again: delete ALL history on the device", () => send("delete_all", {}));
     twoStep($("dRange"), "Click again to confirm range delete", () => {
       if (!$("dFrom").value || !$("dTo").value) { $("cErr").textContent = "Pick both dates."; $("cErr").hidden = false; return; }
       $("cErr").hidden = true; return send("delete_range", { from: dayStart($("dFrom").value), to: dayEnd($("dTo").value) });
     });
+  }
+
+  /* ---- one device: server-managed configuration (owner only; the server re-checks every request) ---- */
+  const CFG_STATE = { none: ["", "Not managed"], pending: ["warn", "Waiting for the device"], applied: ["on", "Applied"], failed: ["bad", "Could not apply"] };
+  const CFG_LABEL = { retention_days: "Keep history for", sync_interval_minutes: "Sync every" };
+  const cfgValue = (k, v) => v === null || v === undefined ? "device's own setting" : k === "retention_days" ? (v === 0 ? "forever" : v + " days") : v + " minutes";
+  const HIST_STATE = { pending: ["warn", "Pending"], applied: ["on", "Applied"], failed: ["bad", "Failed"], superseded: ["", "Replaced"] };
+  async function setupConfig(id, active) {
+    let cur = null;
+    const paint = (st, hist) => {
+      cur = st;
+      const [cls, text] = CFG_STATE[st.state] || CFG_STATE.none;
+      $("cfgState").innerHTML = pill({ cls, text: st.state === "pending" && !st.online ? "Waiting: device offline" : text });
+      if (document.activeElement !== $("cfgRet")) $("cfgRet").value = st.config.retention_days === undefined ? "" : String(st.config.retention_days);
+      if (document.activeElement !== $("cfgSync")) $("cfgSync").value = st.config.sync_interval_minutes === undefined ? "" : String(st.config.sync_interval_minutes);
+      $("cfgMsg").textContent = st.state === "failed" ? "The device refused this version: " + (st.error || "unknown reason") : st.state === "applied" ? "Applied " + ago(st.appliedAt) + " (version " + st.version + ")" : st.state === "pending" ? "Version " + st.version + " saved; " + (st.online ? "the device is connected and will apply it now." : "it applies when the device reconnects.") : "";
+      $("cfgHist").innerHTML = hist.length ? `<table class="table rtable"><thead><tr><th>Version</th><th>When</th><th>By</th><th>Change</th><th>Result</th></tr></thead><tbody>${hist.map(h => `<tr><td class="num" data-primary>${h.version}</td><td class="num" data-label="When">${esc(U.fmtDateTime(h.created_at))}</td><td data-label="By">${esc(h.actor_label || "owner")}</td><td data-label="Change">${esc(Object.keys(h.changes).map(k => (CFG_LABEL[k] || k) + ": " + cfgValue(k, h.changes[k].from) + " → " + cfgValue(k, h.changes[k].to)).join("; "))}</td><td data-label="Result">${pill({ cls: HIST_STATE[h.status][0], text: HIST_STATE[h.status][1] })}${h.error ? `<div class="cell-sub">${esc(h.error)}</div>` : ""}</td></tr>`).join("")}</tbody></table>` : '<p class="caption">No changes yet. Every change is listed here and in the Audit log.</p>';
+    };
+    const load = guarded(async () => { const [st, hist] = await Promise.all([api("GET", `/api/devices/${id}/config`), api("GET", `/api/devices/${id}/config/history`)]); if (document.body.contains($("cfgCard"))) paint(st, hist); });
+    await load();
+    $("cfgSave").onclick = guarded(async () => {
+      const want = { retention_days: $("cfgRet").value, sync_interval_minutes: $("cfgSync").value }, changes = {};
+      for (const k of Object.keys(want)) {
+        const has = Object.prototype.hasOwnProperty.call(cur.config, k);
+        if (want[k] === "") { if (has) changes[k] = null; } else if (!has || cur.config[k] !== Number(want[k])) changes[k] = Number(want[k]);
+      }
+      if (!Object.keys(changes).length) return toast("Nothing to change.");
+      const r = await api("PUT", `/api/devices/${id}/config`, { changes });
+      toast(r.state === "pending" ? "Saved. The device will apply it" + (r.online ? " now." : " when it reconnects.") : "Saved.");
+      await load();
+    });
+    // Live: the server pushes an event when a change is saved and when the device reports back; polling is the fallback.
+    if (window.EventSource) {
+      closeEvents(); evSource = new EventSource("/api/events");
+      ["config_updated", "config_status", "device_presence", "device_connected", "device_disconnected"].forEach(t => evSource.addEventListener(t, () => { if (document.body.contains($("cfgCard"))) load(); }));
+      evSource.onerror = () => closeEvents();
+    }
+    timer = setInterval(() => { if (!document.activeElement || document.activeElement.tagName !== "SELECT") load(); }, 10000);
   }
 
   /* ---- data: export, server-side deletion, retention, backups ---- */
@@ -609,7 +651,7 @@
   }
 
   /* ---- audit log ---- */
-  const ACT_CLASS = { login: "ok", approve: "ok", backup: "ok", pairing_code_created: "ok", pair_completed: "ok", session_deletion_approved: "del", session_deletion_denied: "sec", session_deletion_requested: "sec", session_revoked: "sec", pairing_failed: "sec", pairing_code_cancelled: "sec", pair_requested: "sec", revoke: "sec", device_unenrolled: "sec", refresh_reuse_detected: "sec", delete_data: "del", delete_device: "del" };
+  const ACT_CLASS = { login: "ok", approve: "ok", backup: "ok", pairing_code_created: "ok", pair_completed: "ok", session_deletion_approved: "del", session_deletion_denied: "sec", session_deletion_requested: "sec", session_revoked: "sec", pairing_failed: "sec", pairing_code_cancelled: "sec", config_changed: "sec", config_applied: "ok", config_failed: "del", pair_requested: "sec", revoke: "sec", device_unenrolled: "sec", refresh_reuse_detected: "sec", delete_data: "del", delete_device: "del" };
   const actClass = a => ACT_CLASS[a] || (a.indexOf("enqueue:delete") === 0 ? "del" : "");
   // Detail is stored as JSON text; show it as "key: value" pairs when it parses, otherwise as-is.
   function fmtDetail(s) {

@@ -1,4 +1,4 @@
-# Manual test checklist: Chrome extension v0.5.0
+# Manual test checklist: Chrome extension v0.6.0
 
 Purpose: confirm by hand what the automated tests cannot (how the screens look and behave in a real Chrome). Tick each box; note anything that differs from "Expected".
 
@@ -8,19 +8,19 @@ Purpose: confirm by hand what the automated tests cannot (how the screens look a
 - Use a **separate Chrome profile** (Chrome → profile icon → *Add*), so your real YouTube history, settings and any real pairing are never touched.
 - Use a **throwaway local server and database** (Part C), never your real server. Everything below only affects that throwaway database.
 - Run **one** server process at a time. Close other heavy programs first on a low-memory PC.
-- Expected, not a new bug: in the extension's **Admin console → Private sync**, the second click on **Unpair** throws a `TypeError` and does nothing ([`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)). Don't use that button in this checklist.
+- The old **Admin console** and its Unpair button no longer exist (replaced by the read-only **Device info** page in 0.6.0, see [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)). Settings and Device info have no controls: if you find one that changes anything, that is a bug.
 
 ---
 
 ## Part A: Install the package **[OFFLINE]**
 
 ### A1. Check the ZIP
-- [ ] The file exists: `dist\yt-watch-tracker-v0.5.0.zip` (about 129 KB), next to `yt-watch-tracker-v0.5.0.zip.sha256`.
+- [ ] The file exists: `dist\yt-watch-tracker-v0.6.0.zip` (about 140 KB), next to `yt-watch-tracker-v0.6.0.zip.sha256`.
 - [ ] Verify its checksum (PowerShell):
   ```powershell
   cd "C:\YT VIDEO TRACKER\yt-watch-tracker\dist"
-  (Get-FileHash .\yt-watch-tracker-v0.5.0.zip -Algorithm SHA256).Hash.ToLower()
-  Get-Content .\yt-watch-tracker-v0.5.0.zip.sha256
+  (Get-FileHash .\yt-watch-tracker-v0.6.0.zip -Algorithm SHA256).Hash.ToLower()
+  Get-Content .\yt-watch-tracker-v0.6.0.zip.sha256
   ```
   Expected: the two hashes are identical. (If you rebuilt since, the `.sha256` file is the reference.)
 
@@ -28,7 +28,7 @@ Purpose: confirm by hand what the automated tests cannot (how the screens look a
 - [ ] Pick a **permanent** folder in the **test** setup, for example `C:\Tools\yt-test\`. Not Downloads or Temp, and don't move it later: for an unpacked extension Chrome derives the extension ID from this path.
 - [ ] Extract: right-click the ZIP → *Extract All…* → that folder, **or**
   ```powershell
-  Expand-Archive -Path "C:\YT VIDEO TRACKER\yt-watch-tracker\dist\yt-watch-tracker-v0.5.0.zip" -DestinationPath "C:\Tools\yt-test"
+  Expand-Archive -Path "C:\YT VIDEO TRACKER\yt-watch-tracker\dist\yt-watch-tracker-v0.6.0.zip" -DestinationPath "C:\Tools\yt-test"
   ```
 - [ ] `C:\Tools\yt-test\manifest.json` exists **directly** in that folder (not inside an extra subfolder), alongside `background.js`, `popup\`, `lib\`, `icons\`.
 - [ ] There is **no** `server`, `docs`, `tests`, `.env` or `.db` file in the folder.
@@ -41,9 +41,9 @@ Purpose: confirm by hand what the automated tests cannot (how the screens look a
 - [ ] If it will not load, note the exact message: "Manifest file is missing" means the wrong folder; "requires Chrome 116" means update Chrome.
 
 ### A4. Check version, icon and permissions
-- [ ] The card shows **Version 0.5.0**.
+- [ ] The card shows **Version 0.6.0**.
 - [ ] Click **Details**: *Permissions* lists only reading/changing data on `www.youtube.com` (and storage is implicit). No "all sites" access is granted at install. Note the **ID** (32 letters); it will change if you reload from a different folder.
-- [ ] Open a new tab to `chrome-extension://<the ID>/manifest.json`. Expected: `"manifest_version": 3`, `"version": "0.5.0"`, `"minimum_chrome_version": "116"`, `permissions` = `storage`, `alarms`, and **no** `"key"` field.
+- [ ] Open a new tab to `chrome-extension://<the ID>/manifest.json`. Expected: `"manifest_version": 3`, `"version": "0.6.0"`, `"minimum_chrome_version": "116"`, `permissions` = `storage`, `alarms`, and **no** `"key"` field.
 - [ ] The toolbar icon (pin it via the puzzle-piece menu) is a **verdigris rounded square with three white bars**, crisp at toolbar size; the card in `chrome://extensions` shows the larger version of the same mark.
 
 ---
@@ -57,8 +57,9 @@ Turn off Wi-Fi or just don't start a server.
 - [ ] Header: **Watch Tracker** with the mark, and a pill reading **Tracking on**.
 - [ ] A **Not connected** card with *Server address* and *Pairing code* fields and a **Connect** button; the note says nothing is sent before you pair.
 - [ ] Two tiles **Today** and **Last 7 days** (values like `0s` on a fresh profile).
-- [ ] Buttons **Open dashboard**, **Settings**, **Admin console**; footer reads **Version 0.5.0**.
-- [ ] Switch the theme (Settings page → Theme: Dark/Light) and reopen the popup: colours stay readable in both.
+- [ ] Buttons **Open dashboard**, **Settings**, **Device info**; footer reads **Version 0.6.0**.
+- [ ] A **Track watch time** switch (on). Turn it **off**: the pill changes to *Tracking paused* and the hint says nothing is being recorded; turn it on again. This is the user's own pause control and must always work.
+- [ ] Switch your OS between light and dark: the popup follows it and stays readable (there is no theme selector any more).
 
 ### B2. Form validation (these errors appear before any network call)
 - [ ] Leave both fields empty, click **Connect** → red message *Enter a valid https:// server address.*
@@ -67,8 +68,10 @@ Turn off Wi-Fi or just don't start a server.
 - [ ] Type `abcd efgh` in the code field and click **Connect** with a valid-looking server: nothing is lost on screen (the code is normalised to `ABCD-EFGH`).
 
 ### B3. The other pages open
-- [ ] **Settings** opens in a tab, switches tracking on/off, retention, theme.
-- [ ] **Admin console** opens; *This install* shows **Extension version 0.5.0**; **Private sync** shows the *Off* state with the pairing form; **Diagnostics** shows events.
+- [ ] **Settings** opens in a tab and is **read-only**: cards for *Tracking*, *Server connection*, *Synchronization*, *Current configuration* (each value tagged *Local*) and *This device*; no switches, selects, buttons that change anything, or password section. A note says the page cannot stop you pausing, deleting or uninstalling.
+- [ ] **Device info** opens and is read-only: *This installation* (installation ID, version 0.6.0, browser/OS), *Status*, *Activity* (last activity, last sync, videos, sessions, storage used), and a **Diagnostics** log with only a **Copy log** button (no Clear).
+- [ ] On the local **Dashboard**, scroll to **Your data**: **Export all (JSON)** downloads a file; **Delete date range…**, **Delete channel…** and **Delete all** each need a second click ("Click again…") before anything is removed. Cancel at the confirmation and check nothing was deleted.
+- [ ] (Needs internet, but not the server.) Open the YouTube site with tracking on, watch a few seconds, and confirm Today/Last 7 days on the popup change and the video appears in the Dashboard history.
 - [ ] **Open dashboard** (the local one) opens and renders.
 - [ ] If an admin password is set, the pages ask for it.
 
@@ -112,7 +115,7 @@ node src/server.js
 ### D2. Extension side, normal pairing
 - [ ] Popup → Server `http://127.0.0.1:8443`, Code = the code, **Connect**. Chrome asks to allow access to `127.0.0.1`: accept.
 - [ ] Expected in the popup: green banner **Connected Successfully**, a **Connected** card (server, device `Test PC`, session id, *Channel* **Live** within a few seconds, last sync, pending uploads 0), and the pill/notes updated. Buttons **Sync** and **Delete session** are present.
-- [ ] Expected in the dashboard **without reloading**: the code panel turns green **Connected** with the device name; the device card appears with **Online**, **Extension v0.5.0**, *Last active* "now", **1 active** session, channel **Live**; the overview shows 1 online / 1 device / 1 session; the **Active sessions** tab lists one row; **Pairing history** shows the code as *Used* with its mode *Connects at once*.
+- [ ] Expected in the dashboard **without reloading**: the code panel turns green **Connected** with the device name; the device card appears with **Online**, **Extension v0.6.0**, *Last active* "now", **1 active** session, channel **Live**; the overview shows 1 online / 1 device / 1 session; the **Active sessions** tab lists one row; **Pairing history** shows the code as *Used* with its mode *Connects at once*.
 - [ ] Try the same (used) code again from the popup of a second profile, or watch the Pairing history: a reused code must be refused (*That code is invalid, expired or already used.*).
 
 ### D3. Code states
@@ -161,7 +164,7 @@ Only the test pairing from Part D is involved. It is a throwaway session in a th
 - [ ] **Service worker console:** on the card click **service worker** (under *Inspect views*). In the Console look for red errors; during Part D you should see network requests to `127.0.0.1:8443` in the **Network** tab (`/api/device/token`, `/api/sync/push`, a **WS** connection to `/api/device/ws` with status **101**). If the worker shows *(inactive)* click the link again.
 - [ ] **Popup console:** right-click the popup → **Inspect**. Check Console for errors while clicking through states (the popup closes when focus is lost; keep DevTools docked).
 - [ ] **Dashboard console:** F12 on the dashboard tab → Console should be free of red errors, and **Network → Fetch/XHR** should show `/api/events` as an open request of type *eventsource* receiving events when you pair or request.
-- [ ] **Diagnostics:** extension **Admin console → Diagnostics** (and **Copy log**) should show `paired`, `sync ok`, `session deletion requested`, `unenrolled` with a reason, and no `error` rows.
+- [ ] **Diagnostics:** extension **Device info → Diagnostics** (and **Copy log**) should show `paired`, `sync ok`, `session deletion requested`, `unenrolled` with a reason, and no `error` rows. After Part G also `managed config applied`.
 - [ ] **Server log:** the terminal running the server should show no stack traces (`unhandled`/`uncaught`).
 - [ ] **Updates:** to test updating, change nothing in the code, rebuild (`node tools/build-extension.mjs`), extract **over the same folder**, click the reload icon on the card, and confirm the pairing and settings are **kept** and the Diagnostics log shows *extension updated*.
 
@@ -169,11 +172,40 @@ If anything fails, send: the step number, what you saw, the Errors list / consol
 
 ---
 
+## Part G: Server-managed configuration and read-only status **[BACKEND]**
+
+Needs a paired, connected test device (Part D) with the throwaway server running.
+
+### G1. Set and apply
+- [ ] Dashboard → **Devices** → the device card → **Controls**. A **Configuration** card is above *Controls* with *Keep history for* and *Sync every*, both on *Device's own setting*, a status of *Not managed*, and an empty history. The old "Retention on the device" row is gone.
+- [ ] Choose **Keep history for = 30 days** and **Sync every = 15 minutes**, **Save changes**. Expected: toast *Saved. The device will apply it now.* (it is connected); the badge goes *Waiting for the device* then **Applied** by itself within seconds; history shows version 1 with both changes, by `tester@example.test`, result **Applied**; the message line says *Applied … (version 1)*.
+- [ ] Audit log has `config_changed` (with the before/after) and `config_applied`.
+- [ ] Extension **Settings** now shows *Keep history for: 30 days* and *Sync every: 15 minutes*, each tagged **Managed by administrator**, a *Managed* badge, and *Configuration version 1 · just now*. *Tracking* is still **Local**.
+- [ ] Extension **Device info → Diagnostics** shows `managed config applied`.
+
+### G2. Offline and failure behaviour
+- [ ] Turn Wi-Fi off (or close Chrome), change **Keep history for** to 90 days in the dashboard, Save. Expected: badge **Waiting: device offline**, message says it applies when the device reconnects.
+- [ ] Turn the network back on / reopen Chrome: within a minute (or after **Sync** in the popup) the badge becomes **Applied** and Settings shows 90 days.
+- [ ] Choose *Device's own setting* for **Sync every** and Save: the card records the change, and after the device reports back Settings shows *Sync every: 5 minutes* tagged **Local**.
+- [ ] Try saving without changing anything: toast *Nothing to change.* and no new history row.
+
+### G3. Authorization, from the browser
+- [ ] In a private window (not signed in) open `http://127.0.0.1:8443/api/devices/<a device id>/config`. Expected: `{"error":"unauthorized"}`. Same for `/api/session-requests` and `/api/events`.
+- [ ] In the dashboard tab's DevTools console run `fetch("/api/devices/<id>/config",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({changes:{tracking_enabled:false}})}).then(r=>r.status)`. Expected: **400** (tracking is not a setting). With `{changes:{retention_days:99999}}` also **400**.
+- [ ] Sign out, then repeat the first fetch: **401**.
+
+### G4. The user stays in control
+- [ ] With a managed value applied, turn **Track watch time** off in the popup: it stays off, the dashboard does not change it, and no configuration push turns it on.
+- [ ] Dashboard → device **Controls** → **Resume tracking** (the older remote command) with tracking paused. Expected: the device resumes at the next sync **and** the popup shows a banner *Tracking was resumed by your administrator*, Settings shows *Administrator activity*, and the Audit log records it. (This is the known conflict in [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md); the check is that it is never silent. The user can pause again with the switch.)
+- [ ] The extension can still be disabled or removed from `chrome://extensions` at any time while configuration is managed.
+
+---
+
 ## What needs a backend, at a glance
 
 | Needs a running server | Works offline |
 |---|---|
-| Part C (starting it), Part D, Part E, the *Live* indicator, version shown on the device card, the Network checks in F, the *extension updated* check after reload (needs a pairing to be meaningful) | Part A (ZIP, extract, load, version, icon, permissions), Part B (popup layout, validation, other pages, offline error), the Errors list and service-worker console in F |
+| Part C (starting it), Part D, Part E, Part G, the *Live* indicator, version shown on the device card, the Network checks in F, the *extension updated* check after reload (needs a pairing to be meaningful) | Part A (ZIP, extract, load, version, icon, permissions), Part B (popup layout and pause switch, validation, read-only Settings and Device info, Your data, offline error), the Errors list and service-worker console in F |
 
 ## Still not covered by any test
 

@@ -1,0 +1,30 @@
+/* lib/readonly.css — the read-only status pages (Settings, Device information). Builds on theme.css and shell.css.
+   Teal accent, dark by default when the system is dark (theme.css handles both), calm: one short entrance, no looping motion. */
+.ro-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr)); gap: var(--s-4); }
+.ro-card { display: flex; flex-direction: column; gap: var(--s-4); }
+.ro-card .card-head { margin-bottom: 0; }
+.ro-card .card-head h3 .icon { color: var(--accent); }
+.ro-headline { display: flex; flex-direction: column; gap: var(--s-2); }
+.ro-headline .big { font: 600 var(--fs-title)/1.15 var(--font-display); letter-spacing: -.01em; }
+.ro-headline p { color: var(--text-2); font-size: var(--fs-small); line-height: 1.5; }
+.ro-kv { display: grid; grid-template-columns: minmax(104px, max-content) minmax(0, 1fr); gap: var(--s-2) var(--s-4); font-size: var(--fs-small); margin: 0; }
+.ro-kv dt { color: var(--text-3); }
+.ro-kv dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.ro-rows { display: flex; flex-direction: column; }
+.ro-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-1) var(--s-3); padding: var(--s-3) 0; border-top: 1px solid var(--line); }
+.ro-row:first-child { border-top: 0; padding-top: 0; }
+.ro-row .name { font-weight: 500; }
+.ro-row .val { display: inline-flex; align-items: center; gap: var(--s-2); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.ro-tag { display: inline-flex; align-items: center; gap: 4px; font: 500 11px/1 var(--font-body); padding: 3px 8px; border-radius: var(--r-pill); background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.ro-tag.local { background: var(--sunken); color: var(--text-3); }
+.ro-note { display: flex; gap: var(--s-3); align-items: flex-start; padding: var(--s-3) var(--s-4); border-radius: var(--r-md); background: var(--sunken); color: var(--text-2); font-size: var(--fs-small); line-height: 1.5; }
+.ro-note .icon { flex: none; color: var(--accent); margin-top: 2px; }
+.ro-lead { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); align-items: center; }
+.ro-actions { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.ro-diag { max-height: 280px; overflow: auto; }
+@media (prefers-reduced-motion: no-preference) {
+  .ro-card { animation: ro-rise .24s ease-out both; }
+  .ro-card:nth-child(2) { animation-delay: .03s; } .ro-card:nth-child(3) { animation-delay: .06s; }
+  .ro-card:nth-child(4) { animation-delay: .09s; } .ro-card:nth-child(5) { animation-delay: .12s; }
+}
+@keyframes ro-rise { from { opacity: 0; transform: translateY(6px); } }

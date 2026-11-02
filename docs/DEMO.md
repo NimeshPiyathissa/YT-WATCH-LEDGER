@@ -21,13 +21,13 @@ It prints the dashboard address, a throwaway demo admin login, and a 15-minute e
 1. `chrome://extensions` → **Developer mode** → **Load unpacked** → select the `yt-watch-tracker` folder.
 2. Open the popup. It says *"Tracking YouTube watch time on this device only."* No server is involved yet.
 3. Play a YouTube video for a minute. The toolbar shows a red **REC** badge while it plays.
-4. Popup → **Dashboard** shows today's time, the 14-day chart and the history. Popup → **Admin console** shows the live pill ("Tracking a video now"), the install id and the diagnostics log.
+4. Popup → **Dashboard** shows today's time, the 14-day chart, the history and the *Your data* card. Popup → **Device info** shows the live pill ("Tracking a video now"), the install id and the diagnostics log; **Settings** shows the same state read-only.
 
 ## 3. Enroll (the consent step)
 
-1. Admin console → **Remote sync**. Read the consent text.
-2. Enter the server address and the code from the terminal. Leave *"also upload history already recorded"* **unchecked** to see that only new activity is sent (check it to see the upload-history path).
-3. Click **Enroll this device**. Chrome asks for permission to contact that one address; accept.
+1. Popup: read the note under the pairing form.
+2. Enter the server address and the code from the dashboard.
+3. Click **Connect**. Chrome asks for permission to contact that one address; accept.
 4. Observe what changed:
    - The popup and Settings now show **"Syncing YouTube watch data to 127.0.0.1:…"** permanently.
    - The Remote sync section shows the server, the last successful sync and any last remote command.
@@ -42,9 +42,9 @@ It prints the dashboard address, a throwaway demo admin login, and a 15-minute e
 ## 5. Remote controls, and what the device owner sees
 
 1. On the device page click **Pause tracking**. It appears under *Recent commands* as `pending`.
-2. In the extension click **Sync now** (or wait ≤ ~5 min). The command becomes `acked / ok` on the dashboard; the Admin console shows *Last remote command: pause_tracking* and the tracking toggle is off; the diagnostics log records `remote command applied`.
+2. In the popup click **Sync** (or wait ≤ ~5 min, or nothing if the live connection is on). The command becomes `acked / ok` on the dashboard; the popup shows *Tracking was paused by your administrator*, the tracking switch is off, and the diagnostics log records `remote command applied`.
 3. Click **Resume tracking** and repeat. Then try **Set retention → 7 days**: after the device confirms, the server trims its own copy to the same window.
-4. Try turning tracking back on yourself in the Admin console: the person at the device always has the last word locally.
+4. Turn tracking back on yourself with the popup's **Track watch time** switch: the person at the device can always do this locally.
 
 ## 6. Ending sync, from either side
 

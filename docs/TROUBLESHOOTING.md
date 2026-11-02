@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Start with the extension's **Admin console → Diagnostics** (last 80 events, with *Copy log*) and the dashboard's **Audit log**. For the known bug with the Admin console's Unpair button and other open items, see [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md).
+Start with the extension's **Device info → Diagnostics** (last 80 events, with *Copy log*) and the dashboard's **Audit log**. For the known bug with the Admin console's Unpair button and other open items, see [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md).
 
 ## Pairing
 
@@ -23,6 +23,16 @@ Start with the extension's **Admin console → Diagnostics** (last 80 events, wi
 | Dashboard indicator says *Updating every few seconds* | The event stream (`/api/events`) isn't connected, usually proxy buffering or a sign-out. The page polls instead. Reload the page; check the proxy settings. |
 | Dashboard shows an old version number for a device | The device hasn't contacted the server since it was updated. Click **Sync** in its popup. |
 | Pending uploads keep growing | The server is unreachable from that browser; events stay queued and upload when it connects. |
+
+## Configuration
+
+| Symptom | Cause and fix |
+|---|---|
+| Dashboard shows *Waiting for the device* for a long time | The device is offline or Chrome is closed; it applies the change at its next sync. The card says whether it is connected. Click **Sync** in its popup. |
+| Dashboard shows *Could not apply* with a reason | The extension refused the value or could not apply it. Fix the value and save again (a new version retries). Device info → Diagnostics shows *managed config failed*. |
+| A value in Settings says *Managed by administrator* and the user wants to change it | It is set from the web dashboard (device → Configuration). Choose *Device's own setting* there to stop managing it. |
+| Saving returns "Only approved devices..." / 409 | The device is pending, revoked or removed; configuration needs an active device. |
+| Sync interval did not change | It applies at the device's next contact; check *Last sync* in Settings, and that the version in Settings matches the dashboard. |
 
 ## Session deletion requests
 

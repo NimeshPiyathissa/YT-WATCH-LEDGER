@@ -12,6 +12,19 @@
   $("openAdmin").addEventListener("click", () => open("admin/admin.html"));
   $("version").textContent = "Version " + chrome.runtime.getManifest().version;
 
+  // The user's own control: pausing or resuming tracking is always theirs to do from here.
+  $("trackToggle").addEventListener("change", () => {
+    chrome.storage.local.set({ tracking_enabled: $("trackToggle").checked });
+  });
+  // Anything an administrator has done to this device is shown, never silent (see lib/status.js REMOTE).
+  async function showRemote(x) {
+    const el = $("remote"), cmd = x.last_remote_command, text = cmd && window.YTStatus.REMOTE[cmd.type];
+    if (!text || !cmd.t || Date.now() - cmd.t > 86400000 || (x.remote_cmd_seen || 0) >= cmd.t) { el.hidden = true; return; }
+    el.hidden = false;
+    el.innerHTML = IC.icon("info") + "<span>" + esc(text) + " (" + esc(U.fmtDateTime(cmd.t)) + ").</span>" + '<button class="x" id="rmX" type="button" aria-label="Dismiss">' + IC.icon("x") + "</button>";
+    $("rmX").onclick = () => chrome.storage.local.set({ remote_cmd_seen: cmd.t });
+  }
+
   /* ---- small UI helpers ---- */
   function showError(msg) { const e = $("error"); e.textContent = msg || ""; e.hidden = !msg; }
   function banner(kind, icon, text, dismiss) {
@@ -95,9 +108,12 @@
   /* ---- one render for every state; it re-runs whenever storage changes (decisions, revocation, approval) ---- */
   async function render() {
     if (busy) return;
-    const c = await SYNC.cfg(), x = await local({ rt_state: "offline", tracking_enabled: true, pair_draft: null });
+    const c = await SYNC.cfg(), x = await local({ rt_state: "offline", tracking_enabled: true, pair_draft: null, last_remote_command: null, remote_cmd_seen: 0 });
     const card = $("conn"), enrolled = SYNC.isEnrolled(c), req = c.session_request;
-    pill(x.tracking_enabled !== false, x.tracking_enabled !== false ? "Tracking on" : "Tracking off");
+    pill(x.tracking_enabled !== false, x.tracking_enabled !== false ? "Tracking on" : "Tracking paused");
+    $("trackToggle").checked = x.tracking_enabled !== false;
+    $("trackHint").textContent = x.tracking_enabled !== false ? "Recording YouTube watch time on this device." : "Paused: nothing is being recorded.";
+    showRemote(x);
     $("localNote").hidden = enrolled;
 
     if (!enrolled) {
@@ -115,7 +131,7 @@
   }
   chrome.storage.onChanged.addListener((ch, area) => {
     if (area !== "local" || busy) return;
-    if (["sync_server", "sync_status", "session_request", "just_connected", "sync_notice", "rt_state", "sync_last_ok", "sync_pending", "enrolled_label", "tracking_enabled"].some(k => k in ch)) render();
+    if (["sync_server", "sync_status", "session_request", "just_connected", "sync_notice", "rt_state", "sync_last_ok", "sync_pending", "enrolled_label", "tracking_enabled", "last_remote_command", "remote_cmd_seen"].some(k => k in ch)) render();
   });
 
   render();

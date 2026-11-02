@@ -57,6 +57,7 @@ GET  /api/sessions[?status=all&device=]                -> sessions (id, device, 
 GET  /api/session-requests[?status=]                   -> deletion requests    POST /api/session-requests/:id/approve|deny {note?}   (owner only, decided once)
 GET  /api/pairing-codes                                -> code history (status, used by, mode)   POST /api/pairing-codes/:id/revoke
 GET  /api/events                                       Server-Sent Events for the dashboard (owner cookie)
+GET|PUT /api/devices/:id/config {changes:{retention_days?,sync_interval_minutes?}}  GET /api/devices/:id/config/history   (owner only; values validated, versioned, audited; null clears a setting)
 POST /api/devices/:id/commands {type,payload}          pause_tracking|resume_tracking|set_retention|delete_all|delete_range
 GET  /api/history?device=&from=&to=&q=&url=&limit=&offset=    combined, every record tagged with its source device
 GET  /api/stats?device=&from=&to=&tz=                  totals + daily/weekly/monthly series
@@ -68,6 +69,7 @@ POST /api/device/token    Authorization: Bearer <refreshToken>        -> {access
 GET  /api/device/status   GET /api/device/session      access token; work while pending (session + latest deletion request)
 POST /api/device/session/deletion-request {reason?}    files a REQUEST (201; 200 if one is already open); nothing is deleted until the owner approves
 GET  /api/device/ws                                    WebSocket; first message {type:"auth",token}; hints only
+GET  /api/sync/config -> {version,config}   POST /api/sync/config/ack {version,status:"applied"|"failed",error?}   access token; only the device's own config; stale versions change nothing
 POST /api/sync/push {sessions,clientNow,pending,lastError,clientVersion}   -> {acked:[{sessionId,rev}], rejected:[...], skewMs}
 GET  /api/sync/commands   POST /api/sync/commands/ack  POST /api/sync/unenroll (files a deletion request; kept for extensions older than 0.5)      access token; approved devices only
 ```

@@ -42,7 +42,7 @@ async function enforceRetention() {
 }
 
 /* ---- opt-in sync (no-ops unless the device is enrolled; see lib/sync.js) ---- */
-SYNC.init({ enforceRetention });
+SYNC.init({ enforceRetention, onIntervalChange: applySyncInterval });
 const SYNC_ALARM = "sync", POLL_ALARM = "sync-poll", RT_ALARM = "realtime", MAX_RETRIES = 5;
 let syncing = false, failCount = 0, debounceT = null, retryT = null;
 
@@ -69,8 +69,11 @@ async function runSync() {
   } finally { syncing = false; }
 }
 function scheduleSync() { clearTimeout(debounceT); debounceT = setTimeout(runSync, 5000); }
+// The sync period is 5 minutes unless the owner manages it (5..60, see lib/sync.js MANAGED); read each time so a change applies at once.
+async function syncPeriod() { const c = await getCfg({ sync_interval_minutes: 0 }); return c.sync_interval_minutes >= 5 ? c.sync_interval_minutes : 5; }
+async function applySyncInterval() { chrome.alarms.create(SYNC_ALARM, { periodInMinutes: await syncPeriod() }); }
 function ensureSyncAlarm() {
-  chrome.alarms.get(SYNC_ALARM, a => { if (!a) chrome.alarms.create(SYNC_ALARM, { periodInMinutes: 5 }); });
+  syncPeriod().then(p => chrome.alarms.get(SYNC_ALARM, a => { if (!a || a.periodInMinutes !== p) chrome.alarms.create(SYNC_ALARM, { periodInMinutes: p }); }));
   chrome.alarms.get(RT_ALARM, a => { if (!a) chrome.alarms.create(RT_ALARM, { periodInMinutes: 1 }); });
 }
 chrome.alarms.onAlarm.addListener(a => {
@@ -88,6 +91,7 @@ RT.init(async m => {
       return;
     case "device_status": return runSync();   // approved by the owner
     case "commands": return runSync();        // a remote command is waiting
+    case "config": return runSync();          // the owner changed this device's managed settings
     case "session_request":                   // our deletion request was filed, approved or denied
       await SYNC.storeRequest(m.request);
       if (m.request && m.request.status !== "pending") await DIAG.info("session deletion request " + m.request.status);

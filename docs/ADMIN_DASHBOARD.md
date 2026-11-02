@@ -38,6 +38,23 @@ The pairing lockout is held in memory: restarting the server clears it. The per-
 
 **Live updates.** The page listens to `GET /api/events` (Server-Sent Events) and refreshes within a fraction of a second of any change: device connected or disconnected, pairing completed, deletion requested, approved or denied, session revoked. The indicator beside the title reads *Live*; if the stream drops it reads *Updating every few seconds* and the page polls every 10 seconds until the stream returns. The server closes each stream after 10 minutes and the page reconnects, so a signed-out session cannot keep listening.
 
+## Device configuration (server-managed settings)
+
+Open a device (**Devices → Controls**). The **Configuration** card lets the owner set, per device:
+
+| Setting | Values | Notes |
+|---|---|---|
+| Keep history for | forever, 7, 30, 90, 180, 365, 730 days | The extension deletes older sessions on that device, and the server's copy follows once the device confirms. |
+| Sync every | 5, 10, 15, 30, 60 minutes | Changes the extension's sync timer. |
+
+Choosing *Device's own setting* / *Device default* stops managing that value. There is intentionally **no** tracking on/off or "what to collect" setting here.
+
+**What happens when you press Save changes:** the server checks you are the signed-in owner and that the device is yours and active, validates every value against the allowlist, saves a new version, writes the before/after to the Audit log (`config_changed`), and shows the change in the card's history. A connected extension is told at once and fetches it; otherwise it picks it up at its next sync. The extension validates the values again, applies only what it can, and reports **applied** or **failed** (with a reason); the card shows *Waiting for the device* (and whether it is offline), *Applied*, or *Could not apply*, and updates live. A failure is shown, not retried forever; saving a new version tries again. If you change something again before the device reports, the older version is marked *Replaced*.
+
+**Authorization.** Every configuration route is enforced on the server (owner session, ownership of the device, same-site check); the extension can only read its own device's config. There is one owner account by design, so there is one role. Hiding or disabling a button is not the control. See `server/test/config.test.js` and `server/test/route-auth.test.js`.
+
+**What this does not do.** It executes nothing on the device and cannot override the person using the browser: they can still pause tracking, delete their data (Dashboard → Your data), clear the extension's storage or remove the extension. The extension's Settings page labels each managed value *Managed by administrator*.
+
 ## What approval and revocation do
 
 - A session deletion request is only a request. Nothing changes until you approve it. On approval the server marks the session revoked **and** the device is refused on its very next request even if its short-lived access token has not expired, and a connected extension is told over its live connection and disconnects at once. Its already-uploaded history stays on the server; delete it from *Data & backups* if you want it gone.

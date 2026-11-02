@@ -16,7 +16,7 @@ export function makeDevice({ server, name, clockSkewMs = 0, realtime = false }) 
   // State that survives a "browser restart": storage, IndexedDB and the (injectable) network conditions.
   const store = { install_id: "inst-" + name };
   const idb = new IDBFactory();
-  const net = { offline: false, loseResponses: 0, expireAccessOnce: false, log: [] };
+  const net = { offline: false, loseResponses: 0, expireAccessOnce: false, log: [], mock: {} }; // mock: { "/api/path": () => Response } overrides one server answer
   let ctx = null, onMessage = null, startups = [];
   const alarms = {};
 
@@ -53,6 +53,7 @@ export function makeDevice({ server, name, clockSkewMs = 0, realtime = false }) 
         net.expireAccessOnce = false; net.log.push([p, 401]);
         return new Response(JSON.stringify({ error: "token_invalid" }), { status: 401 });
       }
+      if (net.mock[p]) { const m = net.mock[p](); net.log.push([p, m.status]); return m; }
       const res = await fetch(url, opts);
       net.log.push([p, res.status]);
       // The server processed the request but the device never sees the answer (connection dropped mid-response).

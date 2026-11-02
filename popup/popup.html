@@ -17,10 +17,16 @@
   </header>
 
   <div id="banner" class="banner" role="status" aria-live="polite" hidden></div>
+  <div id="remote" class="banner wait" role="status" hidden></div>
   <div id="error" class="alert bad" role="alert" hidden></div>
 
   <!-- connection card: filled in by popup.js for each state (not connected / pending / connected) -->
   <section id="conn" class="card conn" aria-label="Connection"></section>
+
+  <section class="card pause" aria-label="Tracking">
+    <div class="what"><b>Track watch time</b><span id="trackHint">Recording YouTube watch time on this device.</span></div>
+    <label class="switch"><input type="checkbox" id="trackToggle" aria-label="Track watch time"><span class="slider"></span></label>
+  </section>
 
   <section class="card tiles" aria-label="Watch time">
     <div class="stat"><div class="k">Today</div><div class="v num" id="today">—</div></div>
@@ -32,7 +38,7 @@
     <button class="btn btn-accent btn-block" id="openDash" type="button"><span data-icon="layout-dashboard"></span>Open dashboard</button>
     <div class="pair">
       <button class="btn" id="openSettings" type="button"><span data-icon="settings"></span>Settings</button>
-      <button class="btn" id="openAdmin" type="button"><span data-icon="sliders-horizontal"></span>Admin console</button>
+      <button class="btn" id="openAdmin" type="button"><span data-icon="laptop"></span>Device info</button>
     </div>
   </nav>
   <footer class="foot"><span id="version" class="caption num"></span></footer>
@@ -44,6 +50,7 @@
   <script src="../lib/db.js"></script>
   <script src="../lib/stats.js"></script>
   <script src="../lib/sync.js"></script>
+  <script src="../lib/status.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

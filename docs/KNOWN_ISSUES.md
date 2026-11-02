@@ -1,44 +1,33 @@
 # Known issues and incomplete work
 
-Last reviewed for extension/server version 0.5.0.
+Last reviewed for extension/server version 0.6.0.
 
-## 1. The Admin console's "Unpair" button does not work (bug, left unchanged)
+## 1. Remote `resume_tracking` can override the user's pause (known conflict, kept by decision)
 
-**What happens.** In the extension's Admin console → Private sync, **Unpair** asks you to click twice. The second click runs `S.unenroll()` at `admin/admin.js:73`. That function was removed from `lib/sync.js` in this version, so the click throws an error in the page's console and **nothing else happens**: the device is not unpaired, no request is sent, the pairing stays active. Nothing is lost or corrupted.
+The server can still queue a `resume_tracking` command. When the extension next syncs (or immediately, over its live connection) it sets tracking back on, even if the person at the device had paused it. That conflicts with the principle that tracking should never be re-enabled without the user's consent. The owner chose to keep the command as it is.
 
-**Why it exists.** Version 0.5.0 changed the rule that the person at a device can no longer end its own session; they can only *ask* (the popup's **Delete session** button, which sends a request that the admin approves or denies). The old `unenroll()` did the opposite (revoked the device on the spot), so it was removed from the sync client, but the Admin console button that called it was not updated.
+What is in place instead: it is never silent. The popup shows a banner (*"Tracking was resumed by your administrator"*), Settings lists it under *Administrator activity*, the popup's pause switch is always available to turn it off again, and the action is in the server's audit log. Server-managed configuration (retention, sync interval) deliberately contains **no** tracking setting.
 
-**Decision.** Left unchanged on purpose. During development, an attempt to repair it was interrupted by the assistant tooling's automated safety check, and the owner chose not to retry it or work around it. No restriction in the application itself caused this.
+**To remove the conflict**, delete `resume_tracking` from `COMMANDS` in `server/src/lib/helpers.js` and `lib/sync.js` (and its dashboard button and tests); the user then resumes tracking only from the popup. The older `pause_tracking`, `set_retention`, `delete_all` and `delete_range` commands remain; `delete_all` and `delete_range` remove history stored on the device, visible on the device the same way.
 
-**Workarounds today.**
-- Use the popup's **Delete session**: it files a request, the popup shows *Waiting for Admin Approval*, and the admin decides.
-- Or ask the admin to **Revoke access** / **Remove device** in the dashboard.
-- Or remove the extension at `chrome://extensions` (the server keeps showing the device until you revoke it).
+## 2. The Admin console's Unpair button (former bug, resolved in 0.6.0)
 
-**Safe fix, when you decide to do it** (not applied):
-1. In `admin/admin.js`, replace the `S.unenroll()` call with `S.requestSessionDeletion()` and relabel the button *Request session deletion*, with the same two-click confirmation.
-2. Do **not** call `unenrollLocal` or remove the host permission at that point: the session must stay active until the admin approves. The sync client already clears the credentials and the upload queue when the server reports the session deleted or revoked.
-3. Optionally remove the server's host permission at that moment (`chrome.permissions.remove`), which today is not done anywhere after a revocation either.
-4. Show the request state (pending / denied) in the Private sync card, as the popup already does.
+In 0.5.0 the Admin console's *Unpair* button called `S.unenroll()`, which had been removed, so a second click threw an error and nothing happened. During development an attempt to repair it was interrupted by the assistant tooling's automated safety check and left unchanged by decision; no restriction in the application caused it.
 
-This keeps the admin's approval in the loop. Re-adding a local "unpair that works without the admin" would reverse the new rule and should be a deliberate decision.
+In 0.6.0 the Admin console was replaced by the read-only **Device information** page, so the button and its call no longer exist. A session is ended by the person at the device *asking* (popup → **Delete session**, which files a request) and the admin approving it, or by the admin revoking it. No local "unpair without the admin" was added. An older extension (0.4 or earlier) calling `/api/sync/unenroll` still only files a request.
 
-The Admin console's *Private sync* card also still carries pre-0.5 wording (it describes owner approval as always required, and its "Paired" toast says "waiting for approval" even when the device connected at once). The popup is the up-to-date interface.
-
-An older extension (0.4 or earlier) that calls `/api/sync/unenroll` no longer revokes itself on the server: the server turns that call into a deletion request for the admin.
-
-## 2. Not yet verified by hand
+## 3. Not yet verified by hand
 
 The automated tests (95 + 37 extension tests, 134 server tests) cover the API, the real-time channels, the real extension sync code running against the real server, and the build. They do **not** cover:
 
-- how the new **Devices page** and **popup** look and behave in Chrome (no browser run on the development machine, which was out of memory);
+- how the **Devices page, Configuration panel, popup, Settings page, Device information page and Your data card** look and behave in Chrome (no browser run on the development machine, which was out of memory);
 - loading the built ZIP with *Load unpacked*;
 - the permission prompt shown while pairing from the popup (Chrome may close the popup; the draft-restore workaround is untested);
 - the HTTPS / reverse-proxy path, including WebSocket and event-stream pass-through.
 
 Run the check in [`INSTALL.md`](INSTALL.md#4-connect-the-browser-to-the-dashboard) before depending on it, and report anything off.
 
-## 3. Other limits
+## 4. Other limits
 
 - **No stable extension ID** is configured (no key was available). Unpacked installs get an ID from their folder path; see [`EXTENSION.md`](EXTENSION.md#setting-up-a-stable-extension-id-optional-recommended-before-sharing-builds).
 - **Developer-mode install only.** No Chrome Web Store package or signed CRX.

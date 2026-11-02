@@ -2,6 +2,7 @@
 // see device-harness.js), pair with and sync to the REAL server over HTTP. Nothing about sync itself is mocked.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { makeApp, addOwner, login } from "./helpers.js";
 import { makeDevice } from "./device-harness.js";
 
@@ -44,7 +45,7 @@ test("pairing with a plain code connects the device at once; the dashboard shows
   await d.flush(d.snap("i1", "vidI1"));
   assert.equal((await d.sync()).pushed, 1);
   const dev = (await owner("GET", "/api/devices")).json().find(x => x.id === j.deviceId);
-  assert.deepEqual([dev.status, dev.connection, dev.online, dev.active_sessions, dev.client_version], ["active", "online", true, 1, "0.5.0"]);
+  assert.deepEqual([dev.status, dev.connection, dev.online, dev.active_sessions, dev.client_version], ["active", "online", true, 1, JSON.parse(fs.readFileSync(new URL("../../manifest.json", import.meta.url), "utf8")).version]);
 });
 
 test("pairing with an approval-required code: pending, shows the owner a confirmation code, and uploads NOTHING until approved", async () => {

@@ -47,3 +47,9 @@ body { width: 360px; max-height: 600px; overflow-y: auto; padding: var(--s-4); d
 @keyframes rise { from { opacity: 0; transform: translateY(4px); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse { 50% { opacity: .4; } }
+
+/* the user's own pause switch: always available here, whatever the administrator manages */
+.pause { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); padding: var(--s-3) var(--s-4); }
+.pause .what { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pause .what b { font-weight: 600; }
+.pause .what span { color: var(--text-3); font-size: var(--fs-caption); line-height: 1.4; }

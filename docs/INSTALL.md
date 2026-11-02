@@ -47,6 +47,17 @@ If you ticked *Require my approval* when generating the code, the popup instead 
 
 **Check it end to end** (about two minutes): watch a YouTube video for a minute and pause it; open Dashboard → History and confirm the session appears with the device's name. In the popup click **Delete session** → **Send request**; confirm the dashboard's **Session deletion requests** tab shows it; click **Deny** and confirm the popup says it was denied and stays connected. Then repeat and **Approve**, and confirm the popup returns to *Not connected* with the notice that the session was deleted.
 
+## The extension's pages
+
+| Where | What it is |
+|---|---|
+| Toolbar popup | Pair with a code, connection status, the **Track watch time** pause switch, ask the admin to delete your session. |
+| Settings | Read-only status: tracking, connection, sync, current configuration (managed values are labelled), device and version. |
+| Device info | Read-only: installation ID, version, browser/OS, connection, tracking, pairing, last activity and sync, storage, diagnostics log. |
+| Dashboard | Your local history and charts, and **Your data**: export or delete it. |
+
+Settings and Device info cannot change anything. What the administrator can change from the web dashboard is described in [`ADMIN_DASHBOARD.md`](ADMIN_DASHBOARD.md#device-configuration-server-managed-settings).
+
 ## What gets installed, and the permissions it asks for
 
 | Permission | Why |

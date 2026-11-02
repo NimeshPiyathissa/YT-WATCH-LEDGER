@@ -21,7 +21,7 @@ Per watched video: video id, title, channel, start/end time, seconds actually pl
 
 1. `chrome://extensions` → enable Developer mode → **Load unpacked** → select this folder.
 2. Open a YouTube video; the toolbar badge shows `REC` while it plays.
-3. Popup → **Dashboard** (history, charts), **Settings**, or **Admin console**.
+3. Popup → **Dashboard** (history, charts, and *Your data*: export or delete), **Settings** (read-only status) or **Device info** (read-only).
 
 ### Permissions
 
@@ -34,8 +34,11 @@ Per watched video: video id, title, channel, start/end time, seconds actually pl
 
 ## Local features
 
-- **Admin console** (`admin/`): install identity, live "tracking now" indicator, tracking on/off, retention (7–180 days or forever), theme, export (all / date range / channel) and delete (range / channel / all) with confirmation, an optional admin password, and diagnostics.
-- **Admin password**: a convenience lock for the admin pages only. History is still readable through developer tools and the extension can be removed from `chrome://extensions`. It is not strong security.
+- **Popup:** pair with a code, see the connection, **pause or resume tracking** with the *Track watch time* switch (always yours to use), and ask the admin to delete your session.
+- **Settings** (`settings/`): read-only status: tracking, server connection, synchronization and last sync, current configuration (each value marked *Local* or *Managed by administrator*), device and version. It has no controls.
+- **Device information** (`admin/`): read-only: installation ID, extension version, browser and OS, connection, tracking, pairing and deletion-request status, last activity and sync, storage used, and a diagnostics log you can copy. It replaced the old Admin console.
+- **Dashboard → Your data** (`dashboard/`): review your history, export it (all, date range, channel) and delete it (date range, channel, all, each with a second confirmation). This is the user's own control over the data stored on this device.
+- These pages are display only. They cannot stop you from pausing tracking, deleting your data, clearing the extension's storage or removing the extension at `chrome://extensions`, and neither can the administrator. The old local admin-password lock was removed with the editing controls it protected.
 
 ## Private sync (optional)
 
@@ -52,7 +55,7 @@ Laptop 2 (extension) ─┘
 - **Reliable upload:** every session snapshot is queued in IndexedDB in the same transaction that stores it (event id `sessionId:revision`), uploaded in batches, and removed from the queue only when the server acknowledges that exact revision. Offline periods, dropped connections, expired tokens and browser restarts do not lose events; resending never duplicates (the server keeps the highest revision per session). Pending uploads and the last successful sync are shown in the popup, the Admin console and the dashboard.
 - **Clocks:** devices report their time on each upload; the server measures the offset and places every record on its own timeline, and conflict resolution uses revision counters, not clocks.
 - **What leaves the device:** the session records above (video id, URL, title, channel, start/end, seconds watched, progress, seeks/pauses). History recorded before pairing is not uploaded unless the box is ticked.
-- **What the owner can do remotely:** pause/resume tracking, set retention, delete data stored on the device. These are visible on the device and apply on its next sync.
+- **What the owner can do remotely:** from the dashboard's device page, **Configuration**: set *Keep history for* and *Sync every* (server-validated, saved, audited, pushed live, applied and confirmed by the extension, with status and history). Also the older commands: pause or resume tracking, delete local history. Everything the owner changes is shown on the device (Settings marks managed values; the popup shows a banner after a remote pause, resume or delete). **Known conflict:** `resume_tracking` lets the admin turn tracking back on after the user paused it; see [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md).
 - **Revoke / delete session:** the admin can revoke a session, revoke a device, or remove it from the dashboard; the device is cut off on its very next request (immediately if its live connection is open), clears its credential and queue, and says so. The person at the device cannot delete their session: the popup's **Delete session** sends a **request**, the popup shows *Waiting for Admin Approval*, and the session keeps working until the admin approves (the device is then disconnected) or denies (it stays connected). Data already uploaded stays on the server until the owner deletes it.
 - **Real time:** the dashboard receives live updates (Server-Sent Events) for device connected/disconnected, pairing, deletion requests and decisions, and revocations; connected extensions hold a WebSocket so they show as *Online* and receive commands and decisions at once. Both fall back to polling.
 
@@ -82,13 +85,12 @@ cd server && npm install && npm test # server + end-to-end: two simulated device
 ## Limitations
 
 - Remote commands are polled, so they apply on the device's next sync (up to ~5 minutes), not instantly.
-- **Not yet verified by hand:** the new Devices page, the new popup, loading the built ZIP, the permission prompt during popup pairing, and the HTTPS/proxy path (including WebSocket and event-stream pass-through) were not run in a browser. The API, the real-time channels, the sync client and the build are covered by automated tests (95 + 37 extension tests, 134 server tests). See [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md).
+- **Not yet verified by hand:** the new Devices page, the new popup, loading the built ZIP, the permission prompt during popup pairing, and the HTTPS/proxy path (including WebSocket and event-stream pass-through) were not run in a browser. The API, the real-time channels, the sync client and the build are covered by automated tests (extension and server tests, run one file at a time). See [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md).
 - Player events cannot prove a human was watching; "active" means the player was in a playing, non-ad state.
 - The extension remains removable from `chrome://extensions`. Forced installation needs enterprise policy (`ExtensionInstallForcelist`) and is out of scope here.
 - The person at the device can re-enable tracking after a remote pause. They cannot end their own session (they can request it), but they can still remove the extension at `chrome://extensions`; the server then shows the device as offline until you revoke it.
 - Local deletions (retention, remote delete) don't remove the copy already on the server, except via the server's retention mirror or *Delete device and synced data*.
-- **Known bug:** the Admin console's **Unpair** button throws an error and does nothing (it calls a function removed in 0.5.0). Left unchanged by decision; workarounds and the safe fix are in [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md). Its wording in *Private sync* is also from before this version (it still describes owner approval as always required).
-- Developer-mode install only: no Chrome Web Store package, and no stable extension ID until you add a key ([`docs/EXTENSION.md`](docs/EXTENSION.md)).
+- **Unpair:** the old Admin console's Unpair button (which called a removed function) is gone with that page. The person at the device ends a session by *asking* (popup → Delete session) and the admin approves; history of this is in [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md). Developer-mode install only: no Chrome Web Store package, and no stable extension ID until you add a key ([`docs/EXTENSION.md`](docs/EXTENSION.md)).
 
 ## Layout
 
