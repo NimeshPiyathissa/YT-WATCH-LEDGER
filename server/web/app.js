@@ -8,7 +8,7 @@
   const app = $("app");
   const STALE_MS = 15 * 60 * 1000;        // an approved device that hasn't uploaded for this long shows as offline
   const PAGE = 50;
-  let toastT = null, timer = null, devices = [], lastPath = null;
+  let toastT = null, timer = null, devices = [], lastPath = null, pairing = null, cpTimer = null, evSource = null;
 
   const toast = m => { const t = $("toast"); t.textContent = m; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3200); };
 
@@ -76,7 +76,8 @@
   const clock = ms => { const t = Math.max(0, Math.floor((ms || 0) / 1000)), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), x = t % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); };
   async function loadDevices() {
     devices = (await api("GET", "/api/devices")).slice().sort((a, b) => a.enrolled_at - b.enrolled_at);
-    const n = devices.filter(d => d.status === "pending").length, b = $("pendingBadge");
+    // the sidebar badge counts devices awaiting approval plus session deletion requests awaiting a decision
+    const n = devices.filter(d => d.status === "pending").length + devices.reduce((t, d) => t + (d.pending_requests || 0), 0), b = $("pendingBadge");
     b.textContent = n; b.hidden = n === 0;
     return devices;
   }
@@ -115,7 +116,7 @@
 
   /* ---- router ---- */
   function route() {
-    clearInterval(timer); timer = null;
+    clearInterval(timer); timer = null; clearInterval(cpTimer); cpTimer = null; closeEvents();
     const h = location.hash || "#/overview";
     const login = h === "#/login";
     $("login").hidden = !login; $("shell").hidden = login;
@@ -130,7 +131,8 @@
     const m = h.match(/^#\/device\/([\w-]+)$/);
     if (m) return pageGuard(pageDevice)(m[1]);
     if (h === "#/history") return pageGuard(pageHistory)();
-    if (h === "#/devices") return pageGuard(pageDevices)();
+    const dm = h.match(/^#\/devices(?:\/(requests|sessions|pairing))?$/);
+    if (dm) return pageGuard(pageDevices)(dm[1]);
     if (h === "#/data") return pageGuard(pageData)();
     if (h === "#/audit") return pageGuard(pageAudit)();
     return pageGuard(pageOverview)();
@@ -339,64 +341,211 @@
     load();
   }
 
-  /* ---- devices: pairing, approval, sync health, rename / revoke / remove ---- */
+  /* ---- devices: pairing, connection status, sessions, deletion requests, pairing history ---- */
+  // Connection state comes from the server (device status + sessions + live socket), see connectionOf() in src/lib/sessions.js.
+  const CONN = { online: d => ({ cls: "on" + (d.realtime ? " live" : ""), text: "Online" }), offline: () => ({ cls: "", text: "Offline" }),
+    disconnected: () => ({ cls: "", text: "Disconnected" }), pending: () => ({ cls: "warn", text: "Awaiting approval" }), revoked: () => ({ cls: "bad", text: "Revoked" }) };
+  const connPill = d => pill((CONN[d.connection] || CONN.offline)(d));
+  const shortId = id => `<span class="mono sid" title="${esc(id)}">${esc(String(id).slice(0, 8))}</span>`;
+  const REQ = { pending: ["warn", "Pending"], approved: ["on", "Approved"], denied: ["bad", "Denied"], cancelled: ["", "Cancelled"] };
+  const reqPill = s => pill({ cls: (REQ[s] || REQ.cancelled)[0], text: (REQ[s] || REQ.cancelled)[1] });
+  const CODE = { active: ["info", "Active"], used: ["on", "Used"], expired: ["", "Expired"], cancelled: ["bad", "Cancelled"] };
+  const REVOKED_WHY = { admin_revoked: "revoked by you", device_revoked: "device revoked", deletion_approved: "deleted on request", replaced: "replaced" };
+  const mmss = ms => { const t = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };
+
+  // Accessible confirmation dialog (native <dialog>: focus trap, Esc to cancel, returns focus). Resolves true/false.
+  function confirmDialog({ title, body, ok, danger }) {
+    return new Promise(resolve => {
+      const dlg = document.createElement("dialog"); dlg.className = "dlg"; dlg.setAttribute("aria-labelledby", "dlgT");
+      dlg.innerHTML = `<h3 id="dlgT">${esc(title)}</h3><p class="muted">${esc(body)}</p><div class="row"><button class="btn" value="no" type="button" data-r="0">Cancel</button><button class="btn ${danger ? "btn-danger" : "btn-accent"}" type="button" data-r="1">${esc(ok)}</button></div>`;
+      document.body.appendChild(dlg);
+      const end = v => { dlg.close(); dlg.remove(); resolve(v); };
+      dlg.querySelectorAll("[data-r]").forEach(b => b.onclick = () => end(b.dataset.r === "1"));
+      dlg.addEventListener("cancel", e => { e.preventDefault(); end(false); });
+      dlg.showModal(); dlg.querySelector('[data-r="0"]').focus();
+    });
+  }
+
   function deviceCard(d) {
-    const st = syncState(d), idx = colorIdx(d.id);
-    if (d.status === "pending") return `<article class="card dev pendingcard dc${idx}" data-id="${esc(d.id)}"><div class="top"><div><h2>${esc(d.label || "New device")}</h2><span class="muted small">${esc(d.platform || "")} · asked to join ${esc(ago(d.enrolled_at))}</span></div>${pill(st)}</div>
-      <p>Confirm that the code on the device matches before you approve it:</p><div class="confirm">${esc(d.confirm_code || "")}</div>
+    const idx = colorIdx(d.id);
+    if (d.status === "pending") return `<article class="card dev pendingcard dc${idx}" data-id="${esc(d.id)}"><div class="top"><div><h2>${esc(d.label || "New device")}</h2><span class="muted small">${esc(d.platform || "")} · asked to join ${esc(ago(d.enrolled_at))}</span></div>${connPill(d)}</div>
+      <p>This device used a pairing code that needs your approval. Confirm that the code on the device matches:</p><div class="confirm">${esc(d.confirm_code || "")}</div>
       <p class="muted small">Approving lets this device upload its viewing history to the ledger. Rejecting deletes it and its pairing credential.</p>
       <div class="actions"><button class="btn btn-accent" data-act="approve" type="button">${ic("check")}Approve device</button><button class="btn btn-danger" data-act="reject" type="button">${ic("x")}Reject</button></div></article>`;
-    return `<article class="card dev dc${idx}" data-id="${esc(d.id)}"><div class="top"><div class="row"><span class="chip dc${idx}"><b>${esc(d.label || "Device")}</b></span><span class="muted small">${esc(d.platform || "")}</span></div>${pill(st)}</div>
+    const req = d.pending_requests ? `<a class="alert warn dev-req" href="#/devices/requests">${ic("inbox")}<span><b>Session deletion requested.</b> Review it under Session deletion requests.</span></a>` : "";
+    return `<article class="card dev dc${idx}" data-id="${esc(d.id)}"><div class="top"><div class="row"><span class="chip dc${idx}"><b>${esc(d.label || "Device")}</b></span><span class="muted small">${esc(d.platform || "")}</span></div>${connPill(d)}</div>
+      ${req}
+      <div class="dev-facts">
+        <div><span class="k">Extension</span><span class="v num">${d.client_version ? "v" + esc(d.client_version) : "unknown"}</span></div>
+        <div><span class="k">Last active</span><span class="v" title="${esc(d.last_active ? U.fmtDateTime(d.last_active) : "")}">${esc(d.realtime ? "now" : ago(d.last_active))}</span></div>
+        <div><span class="k">Sessions</span><span class="v num">${d.active_sessions} active</span></div>
+        <div><span class="k">Channel</span><span class="v">${d.realtime ? "Live" : d.connection === "online" ? "Polling" : "None"}</span></div>
+      </div>
       <dl class="kv"><dt>Last upload</dt><dd>${esc(ago(d.last_push_at))}${d.last_push_at ? ` <span class="muted small">(${esc(U.fmtDateTime(d.last_push_at))})</span>` : ""}</dd>
         <dt>Pending on device</dt><dd class="num">${d.pending_count || 0} event${d.pending_count === 1 ? "" : "s"} waiting to upload</dd>
-        <dt>Last contact</dt><dd>${esc(ago(d.last_seen))}</dd>
         <dt>Records here</dt><dd class="num">${d.counts.sessions} sessions · ${d.counts.videos} videos</dd>
         <dt>Device clock</dt><dd class="num">${d.clock_skew_ms ? Math.abs(Math.round(d.clock_skew_ms / 60000)) + " min " + (d.clock_skew_ms > 0 ? "behind" : "ahead") + ", corrected" : "in step with the server"}</dd>
-        <dt>Paired</dt><dd>${esc(when(d.approved_at || d.enrolled_at))}${d.client_version ? ` · extension ${esc(d.client_version)}` : ""}</dd>
+        <dt>Paired</dt><dd>${esc(when(d.approved_at || d.enrolled_at))}${d.pairings > 1 ? ` <span class="muted small">(${d.pairings} pairings)</span>` : ""}</dd>
         ${d.last_error ? `<dt>Last error on device</dt><dd class="err">${esc(d.last_error)}</dd>` : ""}</dl>
       <div class="actions"><a class="btn" href="#/history" data-act="hist">${ic("history")}View history</a><a class="btn" href="#/device/${esc(d.id)}">${ic("sliders-horizontal")}Controls</a><button class="btn" data-act="rename" type="button">${ic("pencil")}Rename</button>
         <button class="btn btn-danger" data-act="revoke" type="button" ${d.status !== "active" ? "disabled" : ""}>${ic("unlink")}Revoke access</button><button class="btn btn-danger" data-act="remove" type="button">${ic("trash-2")}Remove device</button></div></article>`;
   }
-  async function pageDevices() {
-    await loadDevices();
-    const origin = location.origin;
-    app.innerHTML = head("Devices", "Only devices you pair and approve can upload. Revoking cuts a device off at once; removing it also deletes everything it synced.") + `
-      <section class="card stack"><div class="card-head"><h3>Add a device</h3></div>
-        <ol class="steps"><li>Name it and generate a one-time pairing code (valid 15 minutes, works once).</li>
-          <li>On that laptop, open the extension: <b>Admin console → Private sync</b>. Enter <span class="mono">${esc(origin)}</span> and the code.</li>
-          <li>It appears below as <b>Awaiting approval</b>. Check the confirmation code matches, then approve it.</li></ol>
-        <div class="row"><input class="input compact" id="lbl" placeholder="e.g. Laptop 2" maxlength="80" aria-label="Device name" /><button class="btn btn-accent" id="mk" type="button">${ic("key-round")}Generate pairing code</button></div>
-        <div id="codeBox" class="stack" hidden></div></section>
-      <div id="list" class="grid"></div>`;
-    const draw = () => {
-      // Devices waiting for a decision come first.
-      $("list").innerHTML = devices.slice().sort((a, b) => (b.status === "pending") - (a.status === "pending")).map(deviceCard).join("") || `<section class="card">${empty("monitor-smartphone", "No devices yet", "Generate a pairing code above to add your first one.")}</section>`;
-      $("list").querySelectorAll("article").forEach(card => {
+
+  const DTABS = [["devices", "Devices"], ["requests", "Session deletion requests"], ["sessions", "Active sessions"], ["pairing", "Pairing history"]];
+
+  async function pageDevices(tab) {
+    tab = DTABS.some(t => t[0] === tab) ? tab : "devices";
+    let requests = [], sessions = [], codes = [], live = false;
+    const loadAll = async () => { [requests, sessions, codes] = await Promise.all([api("GET", "/api/session-requests"), api("GET", "/api/sessions"), api("GET", "/api/pairing-codes"), loadDevices()]); };
+    await loadAll();
+    app.innerHTML = head("Devices", "Pair a browser with a one-time code, see which devices are connected right now, and decide on requests to delete a session. Revoking cuts a device off at once.", `<span id="liveDot" class="live-dot" role="status">Updating every few seconds</span>`) + `
+      <section class="statbar" id="dStats" aria-label="Devices at a glance"></section>
+      <section class="card pair-card"><div class="card-head"><h3>${ic("key-round")}Pair a device</h3><span class="sub">Codes work once and expire after 15 minutes</span></div>
+        <div class="pair-grid">
+          <ol class="steps"><li>Name the device (optional) and generate a pairing code.</li>
+            <li>In the Chrome extension, click its toolbar icon and enter the code (server <span class="mono">${esc(location.origin)}</span>).</li>
+            <li>The extension shows <b>Connected Successfully</b> and the device appears below as <b>Online</b>.</li></ol>
+          <div class="pair-form">
+            <div class="row"><input class="input compact" id="lbl" placeholder="Device name, e.g. Laptop 2" maxlength="80" aria-label="Device name" /><button class="btn btn-accent" id="mk" type="button">${ic("key-round")}Generate pairing code</button></div>
+            <label class="check"><input type="checkbox" id="reqAppr" /> <span>Require my approval after the code is used</span></label>
+          </div>
+        </div>
+        <div id="codeBox" aria-live="polite"></div></section>
+      <div class="tabs dtabs" role="group" aria-label="Device views" id="dTabs"></div>
+      <div id="dPanel"></div>`;
+
+    function drawStats() {
+      const online = devices.filter(d => d.connection === "online").length, pend = requests.filter(r => r.status === "pending").length;
+      $("dStats").innerHTML = `<div class="stat lead"><div class="k">Online now</div><div class="v num">${online}</div><div class="s">of ${devices.filter(d => d.status === "active").length} connected device${devices.length === 1 ? "" : "s"}</div></div>
+        <div class="stat"><div class="k">Devices</div><div class="v num">${devices.length}</div><div class="s">${devices.filter(d => d.status === "pending").length} awaiting approval</div></div>
+        <div class="stat"><div class="k">Active sessions</div><div class="v num">${sessions.length}</div><div class="s">${sessions.filter(s => s.live).length} with a live connection</div></div>
+        <div class="stat${pend ? " attn" : ""}"><div class="k">Deletion requests</div><div class="v num">${pend}</div><div class="s">${pend ? "waiting for your decision" : "nothing to review"}</div></div>`;
+    }
+    function drawTabs() {
+      const n = { requests: requests.filter(r => r.status === "pending").length, devices: devices.length, sessions: sessions.length };
+      $("dTabs").innerHTML = DTABS.map(([v, t]) => `<button type="button" data-tab="${v}" aria-pressed="${v === tab}">${t}${n[v] ? ` <span class="badge${v === "requests" ? " warn" : ""}">${n[v]}</span>` : ""}</button>`).join("");
+      $("dTabs").querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { tab = b.dataset.tab; history.replaceState(null, "", "#/devices" + (tab === "devices" ? "" : "/" + tab)); lastPath = location.hash; draw(); });
+    }
+    const act = (fn, msg) => guarded(async () => { await fn(); toast(msg); await refresh(); });
+
+    function drawDevices(box) {
+      const order = devices.slice().sort((a, b) => (b.status === "pending") - (a.status === "pending") || (b.connection === "online") - (a.connection === "online"));
+      box.innerHTML = `<div id="list" class="grid">${order.map(deviceCard).join("") || `<section class="card">${empty("monitor-smartphone", "No devices yet", "Generate a pairing code above and enter it in the extension to connect your first device.")}</section>`}</div>`;
+      box.querySelectorAll("article").forEach(card => {
         const id = card.dataset.id, d = devices.find(x => x.id === id), btn = a => card.querySelector(`[data-act="${a}"]`);
-        const done = async (msg, fn) => { await guarded(fn)(); toast(msg); await loadDevices(); draw(); };
-        if (btn("approve")) btn("approve").onclick = () => done("Approved. It will start uploading within a minute.", () => api("POST", `/api/devices/${id}/approve`));
-        twoStep(btn("reject"), "Click again to reject", () => done("Rejected and removed.", () => api("DELETE", `/api/devices/${id}`)));
-        twoStep(btn("revoke"), "Click again to revoke", () => done("Revoked. It can no longer upload or read anything.", () => api("POST", `/api/devices/${id}/revoke`)));
-        twoStep(btn("remove"), "Click again: delete device and its data", () => done("Device and its synced data deleted.", () => api("DELETE", `/api/devices/${id}`)));
+        if (btn("approve")) btn("approve").onclick = act(() => api("POST", `/api/devices/${id}/approve`), "Approved. The device is connected.");
+        twoStep(btn("reject"), "Click again to reject", act(() => api("DELETE", `/api/devices/${id}`), "Rejected and removed."));
+        twoStep(btn("revoke"), "Click again to revoke", act(() => api("POST", `/api/devices/${id}/revoke`), "Revoked. It can no longer upload or read anything."));
+        twoStep(btn("remove"), "Click again: delete device and its data", act(() => api("DELETE", `/api/devices/${id}`), "Device and its synced data deleted."));
         if (btn("hist")) btn("hist").onclick = () => { hf.device = id; };
         if (btn("rename")) btn("rename").onclick = () => {
           const h = card.querySelector(".top .row, .top div");
           h.innerHTML = `<div class="rename-row"><input class="input" id="rn" maxlength="80" value="${esc(d.label || "")}" aria-label="New name" /><button class="btn btn-accent" id="rnGo" type="button">Save</button></div>`;
           card.querySelector("#rn").focus();
-          const save = () => done("Renamed.", () => api("PATCH", `/api/devices/${id}`, { label: card.querySelector("#rn").value.trim() }));
+          const save = act(() => api("PATCH", `/api/devices/${id}`, { label: card.querySelector("#rn").value.trim() }), "Renamed.");
           card.querySelector("#rnGo").onclick = save; card.querySelector("#rn").onkeydown = e => { if (e.key === "Enter") save(); };
         };
       });
-    };
-    draw();
+    }
+
+    function drawRequests(box) {
+      const open = requests.filter(r => r.status === "pending"), past = requests.filter(r => r.status !== "pending");
+      const row = r => `<tr data-id="${esc(r.id)}"><td data-primary><span class="cell-primary">${chip(r.deviceId, r.label)}</span>${r.reason ? `<div class="cell-sub">“${esc(r.reason)}”</div>` : ""}</td>
+        <td data-label="Session ID">${shortId(r.sessionId)}</td><td class="num" data-label="Requested">${esc(U.fmtDateTime(r.requestedAt))}<div class="cell-sub">${esc(ago(r.requestedAt))}</div></td>
+        <td data-label="Status">${reqPill(r.status)}${r.decidedAt ? `<div class="cell-sub">${esc(U.fmtDateTime(r.decidedAt))}${r.decisionNote ? " · " + esc(r.decisionNote) : ""}</div>` : ""}</td>
+        <td class="right" data-label="Decision">${r.status === "pending" ? `<span class="row end"><button class="btn btn-accent btn-sm" data-act="approve" type="button">${ic("check")}Approve</button><button class="btn btn-sm" data-act="deny" type="button">${ic("x")}Deny</button></span>` : '<span class="muted small">Decided</span>'}</td></tr>`;
+      const table = list => `<table class="table rtable"><thead><tr><th>Device</th><th>Session ID</th><th>Requested</th><th>Status</th><th class="right">Decision</th></tr></thead><tbody>${list.map(row).join("")}</tbody></table>`;
+      box.innerHTML = `<section class="card flush"><div class="card-head"><h3>Session deletion requests</h3><span class="sub">The person at a device can only ask; nothing is deleted until you approve</span></div>
+          ${open.length ? table(open) : empty("inbox", "No requests waiting", "When someone clicks Delete session in the extension, the request appears here for you to approve or deny.")}</section>
+        ${past.length ? `<section class="card flush"><div class="card-head"><h3>Decided</h3></div>${table(past.slice(0, 30))}</section>` : ""}`;
+      box.querySelectorAll("tr[data-id]").forEach(tr => {
+        const id = tr.dataset.id, r = requests.find(x => x.id === id), b = a => tr.querySelector(`[data-act="${a}"]`);
+        if (b("approve")) b("approve").onclick = async () => {
+          if (await confirmDialog({ title: "Delete this session?", body: `${r.label || "This device"} will be disconnected and its session ${String(r.sessionId).slice(0, 8)} deleted. It has to pair again with a new code to reconnect. Its synced history stays on the server.`, ok: "Approve and delete", danger: true }))
+            await act(() => api("POST", `/api/session-requests/${id}/approve`), "Approved. The session was deleted and the device disconnected.")();
+        };
+        if (b("deny")) b("deny").onclick = async () => {
+          if (await confirmDialog({ title: "Deny this request?", body: `${r.label || "This device"} stays connected and is told the request was denied.`, ok: "Deny request" }))
+            await act(() => api("POST", `/api/session-requests/${id}/deny`, {}), "Denied. The session stays active.")();
+        };
+      });
+    }
+
+    function drawSessions(box) {
+      box.innerHTML = `<section class="card flush"><div class="card-head"><h3>Active sessions</h3><span class="sub">One per pairing; revoking a session disconnects only that session</span></div>${sessions.length ? `<table class="table rtable"><thead><tr><th>Device</th><th>Session ID</th><th>Paired</th><th>Last seen</th><th>Status</th><th class="right">Action</th></tr></thead><tbody>
+        ${sessions.map(s => `<tr data-id="${esc(s.id)}"><td data-primary>${chip(s.device_id, s.label)}<div class="cell-sub">${s.client_version ? "extension v" + esc(s.client_version) : ""}</div></td><td data-label="Session ID">${shortId(s.id)}</td><td class="num" data-label="Paired">${esc(U.fmtDateTime(s.created_at))}</td><td data-label="Last seen">${esc(ago(s.last_seen))}</td>
+          <td data-label="Status">${pill(s.live ? { cls: "on live", text: "Live" } : { cls: "info", text: "Active" })}</td><td class="right" data-label="Action"><button class="btn btn-danger btn-sm" data-act="revoke" type="button">${ic("unlink")}Revoke</button></td></tr>`).join("")}</tbody></table>`
+        : empty("link", "No active sessions", "Sessions appear here when a device connects with a pairing code.")}</section>`;
+      box.querySelectorAll("tr[data-id]").forEach(tr => {
+        const id = tr.dataset.id, s = sessions.find(x => x.id === id);
+        tr.querySelector('[data-act="revoke"]').onclick = async () => {
+          if (await confirmDialog({ title: "Revoke this session?", body: `${s.label || "The device"} is disconnected right away. This session cannot be used again.`, ok: "Revoke session", danger: true }))
+            await act(() => api("POST", `/api/sessions/${id}/revoke`), "Session revoked.")();
+        };
+      });
+    }
+
+    function drawPairing(box) {
+      box.innerHTML = `<section class="card flush"><div class="card-head"><h3>Pairing history</h3><span class="sub">Codes are shown once and stored hashed; this lists who used each one</span></div>${codes.length ? `<table class="table rtable"><thead><tr><th>Code label</th><th>Created</th><th>Status</th><th>Used by</th><th>Mode</th><th class="right">Action</th></tr></thead><tbody>
+        ${codes.map(c => `<tr data-id="${esc(c.id)}"><td data-primary><span class="cell-primary">${esc(c.label || "Unnamed")}</span><div class="cell-sub">${shortId(c.id)}</div></td><td class="num" data-label="Created">${esc(U.fmtDateTime(c.created_at))}</td>
+          <td data-label="Status">${pill({ cls: CODE[c.status][0], text: CODE[c.status][1] })}${c.status === "active" ? `<div class="cell-sub">expires ${esc(U.fmtDateTime(c.expires_at))}</div>` : ""}</td>
+          <td data-label="Used by">${c.used_at ? `${esc(c.device_label || "Device")}<div class="cell-sub">${esc(U.fmtDateTime(c.used_at))}${c.used_ip ? " · " + esc(c.used_ip) : ""}</div>` : '<span class="muted">—</span>'}</td>
+          <td data-label="Mode">${c.require_approval ? "Needs approval" : "Connects at once"}</td><td class="right" data-label="Action">${c.status === "active" ? '<button class="btn btn-sm" data-act="cancel" type="button">Cancel code</button>' : ""}</td></tr>`).join("")}</tbody></table>`
+        : empty("key-round", "No pairing codes yet", "Generate a code above; every code and the device that used it is recorded here.")}</section>`;
+      box.querySelectorAll('[data-act="cancel"]').forEach(b => b.onclick = act(() => api("POST", `/api/pairing-codes/${b.closest("tr").dataset.id}/revoke`), "Code cancelled."));
+    }
+
+    function draw() {
+      drawStats(); drawTabs();
+      const box = $("dPanel");
+      ({ devices: drawDevices, requests: drawRequests, sessions: drawSessions, pairing: drawPairing })[tab](box);
+      growBars(box);
+    }
+    async function refresh() { await loadAll(); if (pairing && !pairing.done) { const c = codes.find(x => x.id === pairing.id); if (c && c.status === "used") { pairing.done = c; toast("Device connected: " + (c.device_label || "new device")); } } draw(); drawCode(); }
+
+    /* pairing code panel with a live countdown (the code is only known here, right after it is generated) */
+    function drawCode() {
+      clearInterval(cpTimer); const box = $("codeBox");
+      if (!pairing) { box.innerHTML = ""; return; }
+      const p = pairing, total = p.expiresAt - p.createdAt;
+      const paint = () => {
+        const left = p.expiresAt - Date.now(), dead = !p.done && left <= 0;
+        const state = p.done ? "done" : dead ? "dead" : "";
+        box.innerHTML = `<div class="pair-code ${state}"><div class="stack-sm"><div class="code" aria-label="Pairing code">${esc(p.code)}</div><button class="btn btn-sm" id="cpCopy" type="button">${ic("copy")}Copy code</button></div>
+          <div class="pair-meta">${p.done ? `${pill({ cls: "on", text: "Connected" })}<span>${esc(p.done.device_label || "A device")} used this code.</span>`
+            : dead ? `${pill({ cls: "", text: "Expired" })}<span>This code can no longer be used. Generate a new one.</span>`
+            : `<span class="muted small">Expires in</span><span class="countdown" role="timer">${mmss(left)}</span><svg class="meter-bar" viewBox="0 0 100 4" preserveAspectRatio="none" role="img" aria-label="Time left"><rect class="track" width="100" height="4"/><rect class="fill" width="${(Math.max(0, left / total) * 100).toFixed(1)}" height="4"/></svg><span class="muted small">${p.requireApproval ? "You will be asked to approve the device." : "The device connects as soon as the code is entered."}</span>`}
+            <div class="row">${!p.done && !dead ? '<button class="btn btn-sm" id="cpCancel" type="button">Cancel code</button>' : ""}<button class="btn btn-sm" id="cpClose" type="button">Dismiss</button></div></div></div>`;
+        if (p.done || dead) clearInterval(cpTimer);
+        $("cpCopy").onclick = guarded(async () => { await navigator.clipboard.writeText(p.code); toast("Code copied."); });
+        $("cpClose").onclick = () => { pairing = null; drawCode(); };
+        if ($("cpCancel")) $("cpCancel").onclick = act(() => api("POST", `/api/pairing-codes/${p.id}/revoke`), "Code cancelled.");
+      };
+      paint(); if (!p.done) cpTimer = setInterval(paint, 1000);
+    }
     $("mk").onclick = guarded(async () => {
-      const r = await api("POST", "/api/devices/enroll-code", { label: $("lbl").value.trim() });
-      const b = $("codeBox"); b.hidden = false;
-      b.innerHTML = `<div class="code" aria-label="Pairing code">${esc(r.code)}</div><div class="caption">Shown once. Expires ${esc(U.fmtDateTime(r.expiresAt))}.</div>`;
+      const r = await api("POST", "/api/devices/enroll-code", { label: $("lbl").value.trim(), requireApproval: $("reqAppr").checked });
+      pairing = { ...r, createdAt: Date.now(), done: null }; drawCode(); await refresh();
     });
-    // Live sync status, unless the owner is typing.
-    timer = setInterval(async () => { if (document.activeElement && document.activeElement.tagName === "INPUT") return; try { await loadDevices(); draw(); } catch (_e) { /* signed out */ } }, 10000);
+
+    draw(); drawCode();
+    // Real time: the server pushes an event for every change; any event refreshes the page. Polling is the fallback.
+    const setLive = on => { live = on; const el = $("liveDot"); if (el) { el.className = "live-dot" + (on ? " on" : ""); el.textContent = on ? "Live" : "Updating every few seconds"; } };
+    let debounce = null;
+    const kick = () => { clearTimeout(debounce); debounce = setTimeout(() => { if (document.body.contains($("dPanel"))) refresh().catch(() => {}); }, 250); };
+    const connect = () => {
+      if (!window.EventSource || !document.body.contains($("dPanel"))) return;
+      closeEvents(); evSource = new EventSource("/api/events");
+      evSource.onopen = () => setLive(true);
+      evSource.onerror = () => { setLive(false); closeEvents(); setTimeout(() => { if (document.body.contains($("dPanel"))) refreshed().then(ok => ok && connect()); }, 3000); };
+      ["device_connected", "device_disconnected", "device_presence", "pairing_completed", "device_updated", "session_deletion_requested", "session_request_approved", "session_request_denied", "session_revoked", "pairing_code_cancelled"]
+        .forEach(t => evSource.addEventListener(t, kick));
+      evSource.addEventListener("reconnect", () => { closeEvents(); connect(); });
+    };
+    connect();
+    timer = setInterval(() => { if (!live && !(document.activeElement && document.activeElement.tagName === "INPUT")) refresh().catch(() => {}); }, 10000);
   }
+  function closeEvents() { if (evSource) { evSource.close(); evSource = null; } }
 
   /* ---- one device: remote controls ---- */
   async function pageDevice(id) {
@@ -460,7 +609,7 @@
   }
 
   /* ---- audit log ---- */
-  const ACT_CLASS = { login: "ok", approve: "ok", backup: "ok", pairing_code_created: "ok", pair_requested: "sec", revoke: "sec", device_unenrolled: "sec", refresh_reuse_detected: "sec", delete_data: "del", delete_device: "del" };
+  const ACT_CLASS = { login: "ok", approve: "ok", backup: "ok", pairing_code_created: "ok", pair_completed: "ok", session_deletion_approved: "del", session_deletion_denied: "sec", session_deletion_requested: "sec", session_revoked: "sec", pairing_failed: "sec", pairing_code_cancelled: "sec", pair_requested: "sec", revoke: "sec", device_unenrolled: "sec", refresh_reuse_detected: "sec", delete_data: "del", delete_device: "del" };
   const actClass = a => ACT_CLASS[a] || (a.indexOf("enqueue:delete") === 0 ? "del" : "");
   // Detail is stored as JSON text; show it as "key: value" pairs when it parses, otherwise as-is.
   function fmtDetail(s) {

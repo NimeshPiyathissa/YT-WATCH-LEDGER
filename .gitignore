@@ -9,3 +9,6 @@ data/
 sim-devices.json
 *.pem
 *.log
+
+# build output (tools/build-extension.mjs)
+dist/

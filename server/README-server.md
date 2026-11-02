@@ -50,18 +50,24 @@ node scripts/seed-dev.js        # demo owner + two approved devices + sample dat
 ```
 Owner (HttpOnly cookie session; there is no registration route)
 POST /api/auth/login|refresh|logout
-POST /api/devices/enroll-code {label}                  -> {code,expiresAt}     one-time, 15 min
+POST /api/devices/enroll-code {label,requireApproval?} -> {id,code,expiresAt}  one-time, 15 min (PAIRING_CODE_TTL_MIN), shown once
 GET  /api/devices                                      -> devices with sync status (last_push_at, pending_count, last_error, clock_skew_ms, confirm_code while pending)
-POST /api/devices/:id/approve   PATCH /api/devices/:id {label}   POST /api/devices/:id/revoke   DELETE /api/devices/:id
+POST /api/devices/:id/approve   PATCH /api/devices/:id {label}   POST /api/devices/:id/revoke (ends all its sessions)   DELETE /api/devices/:id
+GET  /api/sessions[?status=all&device=]                -> sessions (id, device, status, last_seen, live)    POST /api/sessions/:id/revoke
+GET  /api/session-requests[?status=]                   -> deletion requests    POST /api/session-requests/:id/approve|deny {note?}   (owner only, decided once)
+GET  /api/pairing-codes                                -> code history (status, used by, mode)   POST /api/pairing-codes/:id/revoke
+GET  /api/events                                       Server-Sent Events for the dashboard (owner cookie)
 POST /api/devices/:id/commands {type,payload}          pause_tracking|resume_tracking|set_retention|delete_all|delete_range
 GET  /api/history?device=&from=&to=&q=&url=&limit=&offset=    combined, every record tagged with its source device
 GET  /api/stats?device=&from=&to=&tz=                  totals + daily/weekly/monthly series
 GET  /api/export?format=csv|json&...filters            POST /api/data/delete {confirm:true,device?,from?,to?}
 GET|PUT /api/settings   GET /api/system   POST /api/system/backup   GET /api/audit
 Device (no cookies)
-POST /api/enroll {code,installId,platform}             public; one-time code -> {deviceId,refreshToken,status:"pending",confirmCode}
-POST /api/device/token    Authorization: Bearer <refreshToken>        -> {accessToken (15 min), status, confirmCode}
-GET  /api/device/status                                access token; works while pending
+POST /api/enroll {code,installId,platform,clientVersion}  public; one-time code -> {deviceId,sessionId,refreshToken,status:"active"|"pending",confirmCode?}; 5 wrong codes lock the address out 15 min
+POST /api/device/token    Authorization: Bearer <refreshToken>        -> {accessToken (15 min, names the session), status, sessionId}   403 revoked | session_deleted
+GET  /api/device/status   GET /api/device/session      access token; work while pending (session + latest deletion request)
+POST /api/device/session/deletion-request {reason?}    files a REQUEST (201; 200 if one is already open); nothing is deleted until the owner approves
+GET  /api/device/ws                                    WebSocket; first message {type:"auth",token}; hints only
 POST /api/sync/push {sessions,clientNow,pending,lastError,clientVersion}   -> {acked:[{sessionId,rev}], rejected:[...], skewMs}
-GET  /api/sync/commands   POST /api/sync/commands/ack  POST /api/sync/unenroll      access token; approved devices only
+GET  /api/sync/commands   POST /api/sync/commands/ack  POST /api/sync/unenroll (files a deletion request; kept for extensions older than 0.5)      access token; approved devices only
 ```

@@ -50,7 +50,7 @@ Dashboard → Devices → **Revoke access**. The next request from that laptop, 
 ## Retention
 
 - Server copy: dashboard → Data & backups → **Retention on the server** (or per-device retention commands). Older sessions are removed immediately and re-checked hourly.
-- Never-approved pairing requests expire automatically; pairing codes expire after 15 minutes.
+- Never-approved pairing requests expire automatically; pairing codes expire after 15 minutes and are kept (hashed) as pairing history for 90 days.
 - Backups are pruned by count (`BACKUP_KEEP`), not age. Note that a backup can still contain data you later deleted from the live database, until it is pruned.
 
 ## Health checks
@@ -63,8 +63,9 @@ Dashboard → Devices → **Revoke access**. The next request from that laptop, 
 
 | Symptom | Likely cause |
 |---|---|
-| Laptop stuck on "Waiting for the owner to approve" | Approve it in Devices. The confirmation codes must match. |
-| "That code is invalid, expired or already used" | Codes work once and last 15 minutes. Generate a new one. |
+| Laptop stuck on "Waiting for approval" | Its pairing code needed approval. Approve it in Devices; the confirmation codes must match. |
+| Popup stuck on "Waiting for Admin Approval" | It filed a session deletion request. Decide it under Devices → Session deletion requests. |
+| "That code is invalid, expired or already used" | Codes work once and last 15 minutes. Generate a new one. After 5 wrong codes an address is locked out for 15 minutes ("Too many attempts"). More: [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md). |
 | Laptop shows "The owner revoked/removed this device" | You did. Pair again with a new code if intended. |
 | Pending uploads keep growing | The server is unreachable from that laptop; events stay queued on the laptop and upload when it can connect. |
 | Server exits at start | The message names the missing or invalid variable (`COOKIE_SECRET`, `MASTER_KEY`, TLS settings). |

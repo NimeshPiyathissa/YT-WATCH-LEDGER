@@ -1,12 +1,49 @@
-/* Popup: 340px wide, compact. Everything else comes from lib/theme.css. */
-body { width: 340px; padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-3); }
+/* Popup: 360px wide, compact, never taller than Chrome's 600px popup limit. Everything else comes from lib/theme.css. */
+html { min-width: 360px; }
+body { width: 360px; max-height: 600px; overflow-y: auto; padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-3); }
 .top { display: flex; justify-content: space-between; align-items: center; gap: var(--s-2); }
 .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-4); padding: var(--s-4); }
 .tiles .stat + .stat { border-left: 1px solid var(--line); padding-left: var(--s-4); }
-.tiles .stat .v { font-size: 26px; }
+.tiles .stat .v { font-size: 24px; }
 .note { display: flex; gap: var(--s-2); align-items: flex-start; }
 .note .icon-slot { flex: none; line-height: 0; margin-top: 1px; color: var(--accent); }
-.sync-note { overflow-wrap: anywhere; }
 .actions { display: flex; flex-direction: column; gap: var(--s-2); }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
 .pair .btn { padding: 0 var(--s-2); }
+.foot { display: flex; justify-content: center; }
+
+/* connection card */
+.conn { display: flex; flex-direction: column; gap: var(--s-3); border-left: 3px solid var(--line-strong); }
+.conn.is-on { border-left-color: var(--ok); }
+.conn.is-wait { border-left-color: var(--warn); }
+.conn-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); }
+.conn-head h2 { font: 600 var(--fs-lead)/1.2 var(--font-display); display: flex; align-items: center; gap: var(--s-2); }
+.conn-head h2 .icon { color: var(--text-3); }
+.conn.is-on .conn-head h2 .icon { color: var(--ok); }
+.conn.is-wait .conn-head h2 .icon { color: var(--warn); }
+.conn .kv { grid-template-columns: minmax(84px, max-content) minmax(0, 1fr); gap: 6px var(--s-3); }
+.conn .code-in { font: 600 18px/1 var(--font-mono); letter-spacing: .14em; text-transform: uppercase; text-align: center; }
+.conn .btns { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.conn .btns .btn { flex: 1 1 auto; }
+.confirm-box { display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-3); border-radius: var(--r-md); background: var(--sunken); }
+.confirm-box p { font-size: var(--fs-small); }
+.confirm-code { font: 600 20px/1.2 var(--font-mono); letter-spacing: .14em; color: var(--accent); text-align: center; }
+
+/* banners: "Connected Successfully", "Waiting for Admin Approval", decisions */
+.banner { display: flex; align-items: center; gap: var(--s-2); padding: var(--s-3); border-radius: var(--r-md); font-size: var(--fs-small); font-weight: 500; border: 1px solid var(--line); background: var(--sunken); }
+.banner .icon { flex: none; }
+.banner.ok { background: var(--ok-soft); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+.banner.wait { background: var(--warn-soft); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 30%, var(--line)); }
+.banner.bad { background: var(--danger-soft); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 30%, var(--line)); }
+.banner .x { margin-left: auto; background: none; border: 0; color: inherit; cursor: pointer; padding: 4px; line-height: 0; border-radius: var(--r-sm); }
+.spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; flex: none; }
+.btn[aria-busy="true"] { opacity: .7; pointer-events: none; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .banner, .conn > *, .confirm-box { animation: rise .2s ease-out both; }
+  .spin { animation: spin .8s linear infinite; }
+  .pill.on .dot { animation: pulse 2s ease-in-out infinite; }
+}
+@keyframes rise { from { opacity: 0; transform: translateY(4px); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 50% { opacity: .4; } }

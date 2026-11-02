@@ -104,13 +104,13 @@ Open `https://your.domain`, sign in with the owner account. Overview will be emp
 
 Do this once per laptop.
 
-1. **Get the extension onto the laptop.** It is a Chrome extension loaded from this folder (there is no Web Store build). Copy the repo's top-level folder (the one containing `manifest.json`) to the laptop, open `chrome://extensions`, turn on **Developer mode**, **Load unpacked**, and pick that folder.
-2. **Make a pairing code.** Dashboard → **Devices** → name the device (for example "Laptop 2") → **Generate pairing code**. It works once and expires in 15 minutes.
-3. **Pair.** On the laptop: extension icon → **Admin console** → **Private sync**. Enter `https://your.domain` and the code. Chrome asks permission to contact that one address; accept. Leave "also upload history already recorded" unticked unless you want older history on the server too.
-4. **Approve.** The laptop now says *Waiting for the owner to approve this device* and shows a confirmation code like `5841-BB6A`. In the dashboard, the device appears at the top of Devices as **Awaiting approval** with the same code. Check they match, then **Approve device**. Nothing is uploaded before this.
-5. **Verify.** Within about a minute the laptop's Admin console shows *Approved — syncing*, and the device card in the dashboard shows **Synced**. Watch a video for a minute and pause it: the session appears in **History** with the device's name.
+1. **Get the extension onto the laptop.** Build it with `node tools/build-extension.mjs` (add `--server https://your.domain` to bake in the address) and unzip `dist/yt-watch-tracker-v<version>.zip` into a permanent folder on the laptop. Open `chrome://extensions`, turn on **Developer mode**, **Load unpacked**, and pick the folder containing `manifest.json`. Full steps: [`INSTALL.md`](INSTALL.md). Chrome 116 or newer.
+2. **Make a pairing code.** Dashboard → **Devices** → name the device (for example "Laptop 2") → **Generate pairing code**. It works once and expires in 15 minutes; tick *Require my approval* if you want to approve the device yourself after it uses the code.
+3. **Pair.** On the laptop: click the extension icon, enter `https://your.domain` (unless built with `--server`) and the code, then **Connect**. Chrome asks permission to contact that one address; accept.
+4. **Connected.** The popup shows *Connected Successfully* and the device appears in the dashboard as **Online**. (With *Require my approval*, the popup shows *Waiting for approval* and a confirmation code like `5841-BB6A`; the device appears as **Awaiting approval** with the same code. Check they match, then **Approve device**. Nothing is uploaded before then.)
+5. **Verify.** Watch a video for a minute and pause it: the session appears in **History** with the device's name. The device card shows its extension version and last active time.
 
-To remove a laptop: Devices → **Revoke access** (cuts it off at once, keeps its data) or **Remove device** (also deletes its data). On the laptop, **Unpair** in the Admin console does the same from its side.
+To remove a laptop: Devices → **Revoke access** (cuts it off at once, keeps its data) or **Remove device** (also deletes its data). The person at the laptop cannot remove it themselves: the popup's **Delete session** sends a request that appears under *Session deletion requests* for you to approve or deny. (The Admin console's *Unpair* button is currently broken; see [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md).) If you use a reverse proxy, make sure it forwards WebSockets and streaming responses ([`ADMIN_DASHBOARD.md`](ADMIN_DASHBOARD.md#reverse-proxy-notes)) and that `TRUST_PROXY=true`.
 
 ## What is protected, and what is not
 

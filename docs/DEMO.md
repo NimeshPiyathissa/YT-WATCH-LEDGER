@@ -49,7 +49,7 @@ It prints the dashboard address, a throwaway demo admin login, and a 15-minute e
 ## 6. Ending sync, from either side
 
 - **Admin revokes:** dashboard → device → **Revoke access** (two clicks). On the next sync the extension drops its token, stops sending, and shows *"The server revoked this device. Nothing is being sent any more."* The popup note disappears.
-- **User unenrolls:** re-enroll with a new code, then Admin console → **Unenroll** (two clicks). The server marks the device revoked and records `device_unenrolled`; the extension forgets the credentials and removes the host permission.
+- **User asks to delete the session:** popup → **Delete session** → **Send request**. The popup shows *Waiting for Admin Approval* and keeps syncing; the dashboard's *Session deletion requests* tab shows it, and **Approve** disconnects the device (the server records `session_deletion_approved`) while **Deny** leaves it connected. (This replaces the earlier self-service *Unenroll*; the Admin console's Unpair button is currently broken, see `docs/KNOWN_ISSUES.md`.)
 - **Delete server data:** dashboard → device → **Delete device and synced data**.
 
 ## 7. Clean up

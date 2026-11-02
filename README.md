@@ -6,14 +6,18 @@ A Manifest V3 Chrome extension that records how long you watch YouTube videos, *
 
 - **Tracking is visible.** The toolbar shows a `REC` badge while a video is being recorded, the popup shows tracking state, and once sync is enabled the popup and Settings permanently say *"Syncing YouTube watch data to <server>."*
 - **YouTube only.** The content script runs on `youtube.com`; nothing else is observed.
-- **No covert collection.** Sync is off by default. It starts only when someone at the browser enters a server address and a one-time pairing code and grants the permission prompt, and nothing is uploaded until the owner approves the device. They can unpair at any time.
+- **No covert collection.** Sync is off by default. It starts only when someone at the browser enters a server address and a one-time pairing code and grants the permission prompt. The person at the device can see the connection in the popup at any time, and cannot end it on their own: they can only ask the admin to delete the session. Lawful, informed use is still the operator's responsibility (below).
 - **Lawful, consensual use only.** The operator is responsible for using this lawfully and with the knowledge and agreement of every person whose browsing is recorded (for example, a parent with a child's informed awareness, or your own devices). It is not designed or supported for monitoring people who don't know about it.
 
 ## What it records
 
 Per watched video: video id, title, channel, start/end time, seconds actually playing (ads excluded), and duration. Nothing about other sites, page contents, comments, or account details.
 
-## Install (development)
+## Install
+
+**Build a package and install it manually** (Chrome 116+): `node tools/build-extension.mjs`, unzip `dist/yt-watch-tracker-v<version>.zip` into a permanent folder, then `chrome://extensions` → Developer mode → **Load unpacked**. Step-by-step: [`docs/INSTALL.md`](docs/INSTALL.md); updating and a stable ID: [`docs/EXTENSION.md`](docs/EXTENSION.md); dashboard: [`docs/ADMIN_DASHBOARD.md`](docs/ADMIN_DASHBOARD.md); problems: [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
+
+### From source (development)
 
 1. `chrome://extensions` → enable Developer mode → **Load unpacked** → select this folder.
 2. Open a YouTube video; the toolbar badge shows `REC` while it plays.
@@ -24,7 +28,7 @@ Per watched video: video id, title, channel, start/end time, seconds actually pl
 | Permission | Why |
 |---|---|
 | `storage` | Settings and local state (`chrome.storage.local`); history lives in IndexedDB. |
-| `alarms` | A 5-minute timer for sync (and a 1-minute check while waiting for approval). Does nothing unless paired. |
+| `alarms` | A 5-minute timer for sync and a 1-minute check that restores the live connection. Does nothing unless paired. |
 | host `https://www.youtube.com/*` | Run the tracker on YouTube. |
 | optional hosts (`https://*/*`, `http://localhost/*`, `http://127.0.0.1/*`) | **Not granted at install.** The browser asks for the one server origin you pair with, and it is removed again on unpair. The localhost entries are for development. |
 
@@ -43,13 +47,14 @@ Laptop 1 (extension) ─┐
 Laptop 2 (extension) ─┘
 ```
 
-- **Pairing:** the owner generates a one-time code (15 minutes, single use) in the dashboard; the laptop enters the server address and code. The laptop then shows a confirmation code and waits as **pending**: it cannot upload or read anything until the owner checks the same code in the dashboard and **approves** it.
+- **Pairing:** the admin generates a one-time code (`XXXX-XXXX`, 15 minutes, single use, stored hashed) in the dashboard's **Devices** page; the browser enters the server address and code in the popup. By default the device is connected at once and the popup says *Connected Successfully*. If the admin ticks *Require my approval*, the device instead waits as **pending** (it cannot upload or read anything) until the admin checks the confirmation code and approves it. Wrong codes lock the sender's address out for 15 minutes after 5 attempts. Every pairing is a **session** that can be listed and revoked on its own.
 - **Credentials:** the device keeps one random long-lived credential, sent only to `/api/device/token`, which returns a 15-minute access token used for everything else. Device status is checked on every request, so **revoking takes effect immediately**, even for an unexpired access token. There are no shared passwords or secrets in the extension.
 - **Reliable upload:** every session snapshot is queued in IndexedDB in the same transaction that stores it (event id `sessionId:revision`), uploaded in batches, and removed from the queue only when the server acknowledges that exact revision. Offline periods, dropped connections, expired tokens and browser restarts do not lose events; resending never duplicates (the server keeps the highest revision per session). Pending uploads and the last successful sync are shown in the popup, the Admin console and the dashboard.
 - **Clocks:** devices report their time on each upload; the server measures the offset and places every record on its own timeline, and conflict resolution uses revision counters, not clocks.
 - **What leaves the device:** the session records above (video id, URL, title, channel, start/end, seconds watched, progress, seeks/pauses). History recorded before pairing is not uploaded unless the box is ticked.
 - **What the owner can do remotely:** pause/resume tracking, set retention, delete data stored on the device. These are visible on the device and apply on its next sync.
-- **Revoke / unpair:** the owner can revoke or remove a device from the dashboard; the device then stops, clears its credential and queue, and says so. The person at the device can unpair too. Data already uploaded stays on the server until the owner deletes it.
+- **Revoke / delete session:** the admin can revoke a session, revoke a device, or remove it from the dashboard; the device is cut off on its very next request (immediately if its live connection is open), clears its credential and queue, and says so. The person at the device cannot delete their session: the popup's **Delete session** sends a **request**, the popup shows *Waiting for Admin Approval*, and the session keeps working until the admin approves (the device is then disconnected) or denies (it stays connected). Data already uploaded stays on the server until the owner deletes it.
+- **Real time:** the dashboard receives live updates (Server-Sent Events) for device connected/disconnected, pairing, deletion requests and decisions, and revocations; connected extensions hold a WebSocket so they show as *Online* and receive commands and decisions at once. Both fall back to polling.
 
 ## Server
 
@@ -77,19 +82,21 @@ cd server && npm install && npm test # server + end-to-end: two simulated device
 ## Limitations
 
 - Remote commands are polled, so they apply on the device's next sync (up to ~5 minutes), not instantly.
-- The extension's own screens (popup, Admin console) were not run in Chrome against a live server after the latest changes. The sync code behind them is tested through simulated devices, and the dashboard was checked in Chrome against a local dev server. A run of the real extension through your own HTTPS deployment is still to do.
+- **Not yet verified by hand:** the new Devices page, the new popup, loading the built ZIP, the permission prompt during popup pairing, and the HTTPS/proxy path (including WebSocket and event-stream pass-through) were not run in a browser. The API, the real-time channels, the sync client and the build are covered by automated tests (95 + 37 extension tests, 134 server tests). See [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md).
 - Player events cannot prove a human was watching; "active" means the player was in a playing, non-ad state.
 - The extension remains removable from `chrome://extensions`. Forced installation needs enterprise policy (`ExtensionInstallForcelist`) and is out of scope here.
-- The person at the device can re-enable tracking after a remote pause, and can unenroll.
+- The person at the device can re-enable tracking after a remote pause. They cannot end their own session (they can request it), but they can still remove the extension at `chrome://extensions`; the server then shows the device as offline until you revoke it.
 - Local deletions (retention, remote delete) don't remove the copy already on the server, except via the server's retention mirror or *Delete device and synced data*.
-- The extension and dashboard were tested in Chrome against a local development server only; no Chrome Web Store build or HTTPS-proxy test is included.
+- **Known bug:** the Admin console's **Unpair** button throws an error and does nothing (it calls a function removed in 0.5.0). Left unchanged by decision; workarounds and the safe fix are in [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md). Its wording in *Private sync* is also from before this version (it still describes owner approval as always required).
+- Developer-mode install only: no Chrome Web Store package, and no stable extension ID until you add a key ([`docs/EXTENSION.md`](docs/EXTENSION.md)).
 
 ## Layout
 
 ```
 manifest.json  background.js  content/tracker.js
-lib/      util accounting db stats charts lock diag sync  theme.css theme-init.js
-popup/ dashboard/ settings/ admin/
+lib/      util accounting db stats charts lock diag sync realtime build-config  theme.css theme-init.js
+popup/ dashboard/ settings/ admin/ icons/
+tools/    build-extension.mjs (package + ZIP)  make-icons.mjs
 tests/    session-logic.test.js  sync-queue.test.js
 server/   Fastify + SQLite API, web dashboard (web/), migrations, tests
 ```

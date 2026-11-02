@@ -15,20 +15,30 @@
     <span class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>Watch Tracker</span>
     <span id="state" class="pill off"><span class="dot"></span><span>Checking</span></span>
   </header>
+
+  <div id="banner" class="banner" role="status" aria-live="polite" hidden></div>
+  <div id="error" class="alert bad" role="alert" hidden></div>
+
+  <!-- connection card: filled in by popup.js for each state (not connected / pending / connected) -->
+  <section id="conn" class="card conn" aria-label="Connection"></section>
+
   <section class="card tiles" aria-label="Watch time">
     <div class="stat"><div class="k">Today</div><div class="v num" id="today">—</div></div>
     <div class="stat"><div class="k">Last 7 days</div><div class="v num" id="week">—</div></div>
   </section>
   <p class="caption note" id="localNote"><span class="icon-slot" data-icon="shield-check"></span><span>Tracking YouTube watch time on this device only.</span></p>
-  <p class="sync-note" id="syncNote" hidden></p>
+
   <nav class="actions" aria-label="Open">
-    <button class="btn btn-accent btn-block" id="openDash"><span data-icon="layout-dashboard"></span>Open dashboard</button>
+    <button class="btn btn-accent btn-block" id="openDash" type="button"><span data-icon="layout-dashboard"></span>Open dashboard</button>
     <div class="pair">
-      <button class="btn" id="openSettings"><span data-icon="settings"></span>Settings</button>
-      <button class="btn" id="openAdmin"><span data-icon="sliders-horizontal"></span>Admin console</button>
+      <button class="btn" id="openSettings" type="button"><span data-icon="settings"></span>Settings</button>
+      <button class="btn" id="openAdmin" type="button"><span data-icon="sliders-horizontal"></span>Admin console</button>
     </div>
   </nav>
+  <footer class="foot"><span id="version" class="caption num"></span></footer>
+
   <script src="../lib/icons.js"></script>
+  <script src="../lib/build-config.js"></script>
   <script src="../lib/util.js"></script>
   <script src="../lib/accounting.js"></script>
   <script src="../lib/db.js"></script>
