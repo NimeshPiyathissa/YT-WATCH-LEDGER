@@ -62,6 +62,19 @@ test("two backups in the same second do not overwrite each other", async () => {
   db.close();
 });
 
+test("backups taken across a clock-second boundary list newest first and pruning keeps the newest (fixed clock, no timing luck)", async () => {
+  const dir = tmp(), { db } = seededDb(dir), bk = path.join(dir, "bk");
+  const t1 = new Date("2026-11-02T10:00:00Z"), t2 = new Date("2026-11-02T10:00:01Z");
+  const made = [];
+  for (const t of [t1, t1, t2, t2, t2]) made.push((await createBackup(db, bk, 3, t)).name); // two in one second, three in the next
+  assert.deepEqual(made, ["tracker-20261102T100000Z.db", "tracker-20261102T100000Z-2.db", "tracker-20261102T100001Z.db", "tracker-20261102T100001Z-2.db", "tracker-20261102T100001Z-3.db"]);
+  const listed = listBackups(bk).map(b => b.name);
+  assert.deepEqual(listed, made.slice(-3).reverse(), "chronological, newest first");
+  // The trap this guards against: as plain strings the newest ("...Z-3.db") sorts BEFORE the oldest kept ("...Z.db").
+  assert.equal(listed[0] > listed[2], false, "alphabetical order is NOT chronological order here, so code and tests must not use it");
+  db.close();
+});
+
 test("restore brings back the data as it was at backup time and keeps a safety copy of what it replaced", async () => {
   const dir = tmp(), { db, file } = seededDb(dir), bk = path.join(dir, "bk");
   const { name } = await createBackup(db, bk, 5);

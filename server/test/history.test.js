@@ -135,10 +135,17 @@ test("system: on-demand backup, listing, and pruning to the configured count", a
   const { app, A, get, backupDir } = await setup();
   const before = (await get("/api/system")).json();
   assert.deepEqual([before.backups.length, before.lastBackupAt], [0, null]);
-  for (let i = 0; i < 5; i++) assert.equal((await app.inject({ method: "POST", url: "/api/system/backup", headers: { cookie: A } })).statusCode, 200);
+  const made = []; // names in creation order, as the server returned them
+  for (let i = 0; i < 5; i++) {
+    const r = await app.inject({ method: "POST", url: "/api/system/backup", headers: { cookie: A } });
+    assert.equal(r.statusCode, 200);
+    made.push(r.json().name);
+  }
   const after = (await get("/api/system")).json();
   assert.equal(after.backups.length, 3, "backupKeep=3 in the test config");
   assert.ok(after.lastBackupAt > 0);
-  assert.ok(after.backups[0].name > after.backups[2].name, "newest first");
+  // Newest first means chronological. Not alphabetical: within one second the names are Z.db, Z-2.db, Z-3.db and "Z-3" sorts
+  // before "Z." as a string, which made a plain `name > name` check fail whenever the backups straddled a clock second.
+  assert.deepEqual(after.backups.map(x => x.name), made.slice(-3).reverse(), "the three newest, newest first");
   assert.equal((await import("node:fs")).readdirSync(backupDir).filter(n => n.endsWith(".partial")).length, 0);
 });
