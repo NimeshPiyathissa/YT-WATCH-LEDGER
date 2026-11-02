@@ -23,7 +23,14 @@ export function decryptJSON(buf) {
 // device/refresh tokens are high-entropy random, so a fast hash is fine
 export function sha256(s) { return crypto.createHash("sha256").update(s).digest("hex"); }
 export function randomToken(bytes = 32) { return crypto.randomBytes(bytes).toString("base64url"); }
-export function randomCode() { return crypto.randomBytes(5).toString("hex").toUpperCase(); } // enrollment code
+// Pairing code: 8 characters from an alphabet without look-alikes (no 0/O, 1/I/L), shown as XXXX-XXXX.
+// 31^8 ~ 8.5e11 combinations against a 15-minute life, single use, and per-IP rate limits and lockout.
+const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+export function randomCode() {
+  let s = "";
+  while (s.length < 8) { const b = crypto.randomBytes(1)[0]; if (b < 248) s += CODE_ALPHABET[b % 31]; } // 248 = 8*31: no modulo bias
+  return s.slice(0, 4) + "-" + s.slice(4);
+}
 export const uuid = () => crypto.randomUUID();
 export function hmac(data) {
   return crypto.createHmac("sha256", process.env.COOKIE_SECRET || "").update(data).digest("base64url");

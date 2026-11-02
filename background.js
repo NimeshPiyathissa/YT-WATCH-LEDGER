@@ -1,20 +1,25 @@
 /* background.js — service worker. SESSION_FLUSH -> putSession -> recomputeVideo. */
-importScripts("lib/util.js", "lib/accounting.js", "lib/db.js", "lib/diag.js", "lib/sync.js");
+importScripts("lib/build-config.js", "lib/util.js", "lib/accounting.js", "lib/db.js", "lib/diag.js", "lib/sync.js", "lib/realtime.js");
 
-const DB = self.YTDB, A = self.YTAccounting, DIAG = self.YTDiag, SYNC = self.YTSync;
+const DB = self.YTDB, A = self.YTAccounting, DIAG = self.YTDiag, SYNC = self.YTSync, RT = self.YTRealtime;
 const getCfg = k => new Promise(r => chrome.storage.local.get(k, r));
 const setCfg = o => new Promise(r => chrome.storage.local.set(o, r));
 const thumb = id => "https://i.ytimg.com/vi/" + id + "/mqdefault.jpg";
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.get({ install_id: null, installed_at: null }, res => {
-    const patch = {};
+// Install and update. An update (a new build loaded over the old one) keeps chrome.storage and IndexedDB, so settings,
+// history and the paired session carry over untouched; nothing here resets them.
+chrome.runtime.onInstalled.addListener(details => {
+  const version = chrome.runtime.getManifest().version;
+  chrome.storage.local.get({ install_id: null, installed_at: null, ext_version: null }, res => {
+    const patch = { ext_version: version };
     if (!res.install_id) patch.install_id = (self.crypto?.randomUUID?.() || self.YTUtil.uuid());
     if (!res.installed_at) patch.installed_at = Date.now();
-    if (Object.keys(patch).length) chrome.storage.local.set(patch);
+    chrome.storage.local.set(patch);
+    if (details && details.reason === "update" && res.ext_version !== version) DIAG.info("extension updated", { from: res.ext_version || details.previousVersion || "?", to: version });
   });
   chrome.action.setBadgeBackgroundColor({ color: "#d92d20" });
   ensureSyncAlarm();
+  runSync().catch(() => {}); // report the new version and reconnect straight away
 });
 // Browser restart: apply retention and resume uploading whatever is still in the outbox.
 chrome.runtime.onStartup.addListener(() => { enforceRetention().catch(() => {}); runSync().catch(() => {}); });
@@ -38,7 +43,7 @@ async function enforceRetention() {
 
 /* ---- opt-in sync (no-ops unless the device is enrolled; see lib/sync.js) ---- */
 SYNC.init({ enforceRetention });
-const SYNC_ALARM = "sync", POLL_ALARM = "sync-poll", MAX_RETRIES = 5;
+const SYNC_ALARM = "sync", POLL_ALARM = "sync-poll", RT_ALARM = "realtime", MAX_RETRIES = 5;
 let syncing = false, failCount = 0, debounceT = null, retryT = null;
 
 async function runSync() {
@@ -50,8 +55,9 @@ async function runSync() {
     // Waiting for the owner's approval: check again in a minute (alarms survive service-worker restarts).
     if (r.pending) chrome.alarms.create(POLL_ALARM, { delayInMinutes: 1 });
     if (r.pending) await DIAG.info("waiting for owner approval");
-    else if (r.revoked) await DIAG.warn("sync stopped: device no longer authorised");
+    else if (r.revoked) { await DIAG.warn("sync stopped: device no longer authorised", { reason: r.kind }); await RT.stop(); }
     else if (r.pushed || r.applied) await DIAG.info("sync ok", { pushed: r.pushed, commands: r.applied });
+    if (!r.revoked && !r.skipped) RT.connect().catch(() => {});
     return r;
   } catch (err) {
     failCount++;
@@ -65,9 +71,34 @@ async function runSync() {
 function scheduleSync() { clearTimeout(debounceT); debounceT = setTimeout(runSync, 5000); }
 function ensureSyncAlarm() {
   chrome.alarms.get(SYNC_ALARM, a => { if (!a) chrome.alarms.create(SYNC_ALARM, { periodInMinutes: 5 }); });
+  chrome.alarms.get(RT_ALARM, a => { if (!a) chrome.alarms.create(RT_ALARM, { periodInMinutes: 1 }); });
 }
-chrome.alarms.onAlarm.addListener(a => { if (a.name === SYNC_ALARM || a.name === POLL_ALARM) runSync(); });
+chrome.alarms.onAlarm.addListener(a => {
+  if (a.name === SYNC_ALARM || a.name === POLL_ALARM) runSync();
+  if (a.name === RT_ALARM) RT.connect().catch(() => {}); // brings the socket back if the worker was stopped
+});
 ensureSyncAlarm();
+
+/* ---- real-time events from the server (hints; the work itself goes through the normal API) ---- */
+RT.init(async m => {
+  switch (m.type) {
+    case "ready":
+      if (m.deletionRequest !== undefined) await SYNC.storeRequest(m.deletionRequest);
+      if (m.status === "active" && (await SYNC.cfg()).sync_status === "pending") return runSync();
+      return;
+    case "device_status": return runSync();   // approved by the owner
+    case "commands": return runSync();        // a remote command is waiting
+    case "session_request":                   // our deletion request was filed, approved or denied
+      await SYNC.storeRequest(m.request);
+      if (m.request && m.request.status !== "pending") await DIAG.info("session deletion request " + m.request.status);
+      return;
+    case "session_revoked":                   // revoked, removed, or our deletion request was approved
+      await SYNC.revoked(m.reason);
+      await DIAG.warn("session ended by the server", { reason: m.reason });
+      return RT.stop();
+  }
+});
+RT.connect().catch(() => {});
 
 async function handleFlush(snap, sender) {
   const cfg = await getCfg({ tracking_enabled: true });
@@ -96,6 +127,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case "SESSION_FLUSH":
       return run(handleFlush(msg.snapshot, sender).catch(async err => { await DIAG.error("flush failed", String(err)); throw err; }));
     case "SYNC_NOW": return run(runSync());
+    case "PAIRED": return run(runSync().then(r => { RT.connect().catch(() => {}); return r; }));
     case "ENFORCE_RETENTION": return run(enforceRetention().then(n => ({ ok: true, removed: n })));
     case "CLEAR_ALL": return run(DB.clearAll().then(() => DIAG.info("all data cleared")).then(() => ({ ok: true })));
     case "GET_DIAG": return run(DIAG.read());

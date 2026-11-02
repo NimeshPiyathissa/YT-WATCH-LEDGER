@@ -11,7 +11,8 @@ import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const read = f => fs.readFileSync(path.join(ROOT, f), "utf8");
 
-export function makeDevice({ server, name, clockSkewMs = 0 }) {
+// realtime: true gives the device a real WebSocket, so lib/realtime.js connects to the server like it does in Chrome.
+export function makeDevice({ server, name, clockSkewMs = 0, realtime = false }) {
   // State that survives a "browser restart": storage, IndexedDB and the (injectable) network conditions.
   const store = { install_id: "inst-" + name };
   const idb = new IDBFactory();
@@ -60,8 +61,9 @@ export function makeDevice({ server, name, clockSkewMs = 0 }) {
     };
     const sandbox = {
       chrome, indexedDB: idb, IDBKeyRange, fetch: fetchWrapped, URL, URLSearchParams, AbortController, console, crypto: globalThis.crypto,
-      Date: SkewedDate, navigator: { platform: "TestOS" },
+      Date: SkewedDate, navigator: { platform: "TestOS" }, ...(realtime ? { WebSocket: globalThis.WebSocket } : {}),
       setTimeout: () => 0, clearTimeout: () => {}, // no background timers: tests trigger syncs explicitly
+      setInterval: () => 0, clearInterval: () => {},
       importScripts: (...files) => files.forEach(f => vm.runInContext(read(f), sandbox, { filename: f }))
     };
     sandbox.self = sandbox;
@@ -78,7 +80,10 @@ export function makeDevice({ server, name, clockSkewMs = 0 }) {
     sync: () => send({ type: "SYNC_NOW" }),
     pair: (code, opts) => ctx.YTSync.enroll(server, code, opts),
     cfg: () => ctx.YTSync.cfg(),
-    unenroll: () => ctx.YTSync.unenroll(),
+    connect: () => ctx.YTRealtime.connect(),
+    disconnect: () => ctx.YTRealtime.stop(),
+    isLive: () => ctx.YTRealtime.isOpen(),
+    requestDeletion: reason => ctx.YTSync.requestSessionDeletion(reason),
     outboxCount: () => ctx.YTDB.outboxCount(),
     outbox: () => ctx.YTDB.outboxAll(),
     sessions: () => ctx.YTDB.getAllSessions(),

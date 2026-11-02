@@ -42,19 +42,16 @@ export async function accessFor(app, refresh) {
   return { res, auth: res.statusCode === 200 ? { authorization: "Bearer " + res.json().accessToken } : null };
 }
 
-// Owner creates a pairing code, a device redeems it (-> pending), the owner approves it, the device gets an access token.
-// Pass { approve:false } to leave the device pending.
+// Owner creates a pairing code and a device redeems it. By default that connects the device at once; pass
+// { approve:false } to use an approval-required code and leave the device pending.
 export async function enrollDevice(app, ownerCookie, label = "Test device", { approve = true } = {}) {
-  const code = (await app.inject({ method: "POST", url: "/api/devices/enroll-code", headers: { cookie: ownerCookie }, payload: { label } })).json().code;
+  const code = (await app.inject({ method: "POST", url: "/api/devices/enroll-code", headers: { cookie: ownerCookie }, payload: { label, requireApproval: !approve } })).json().code;
   const res = await app.inject({ method: "POST", url: "/api/enroll", payload: { code, installId: "inst-" + code, label, platform: "test" } });
   if (res.statusCode !== 200) throw new Error("enroll failed: " + res.statusCode);
   const j = res.json();
-  if (approve) {
-    const a = await app.inject({ method: "POST", url: `/api/devices/${j.deviceId}/approve`, headers: { cookie: ownerCookie } });
-    if (a.statusCode !== 200) throw new Error("approve failed: " + a.statusCode);
-  }
+  if (j.status !== (approve ? "active" : "pending")) throw new Error("unexpected status after pairing: " + j.status);
   const { auth } = await accessFor(app, j.refreshToken);
-  return { deviceId: j.deviceId, refresh: j.refreshToken, auth, confirmCode: j.confirmCode, code };
+  return { deviceId: j.deviceId, sessionId: j.sessionId, refresh: j.refreshToken, auth, confirmCode: j.confirmCode, code };
 }
 
 export const session = (id, video, over = {}) => ({

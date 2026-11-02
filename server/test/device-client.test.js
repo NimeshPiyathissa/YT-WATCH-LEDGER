@@ -18,23 +18,38 @@ before(async () => {
 after(async () => { await ctx.app.close(); });
 
 const owner = (method, url, payload) => ctx.app.inject({ method, url, headers: { cookie: A }, payload });
-const newCode = async label => (await owner("POST", "/api/devices/enroll-code", { label })).json().code;
+const newCode = async (label, requireApproval = false) => (await owner("POST", "/api/devices/enroll-code", { label, requireApproval })).json().code;
 const approve = id => owner("POST", `/api/devices/${id}/approve`);
 const history = async q => (await owner("GET", "/api/history?limit=200" + (q || ""))).json();
 const rows = id => ctx.db.prepare("SELECT session_id,rev FROM sessions WHERE device_id=?").all(id);
 
-// A fresh, paired and APPROVED device.
+// A fresh, paired, connected device (pass { approve:false } for an approval-required code that leaves it pending).
 async function pairedDevice(name, opts = {}) {
   const d = makeDevice({ server, name, clockSkewMs: opts.clockSkewMs || 0 });
-  const j = await d.pair(await newCode(name), opts.pair);
+  const j = await d.pair(await newCode(name, opts.approve === false), opts.pair);
   d.id = j.deviceId;
-  if (opts.approve !== false) { assert.equal((await approve(d.id)).statusCode, 200); await d.sync(); }
+  if (opts.approve !== false) { assert.equal(j.status, "active", "connected straight away"); await d.sync(); }
   return d;
 }
 
-test("pairing: a new device is pending, shows the owner a confirmation code, and uploads NOTHING until approved", async () => {
+test("pairing with a plain code connects the device at once; the dashboard shows it connected", async () => {
+  const d = makeDevice({ server, name: "instant-one" });
+  const j = await d.pair(await newCode("Instant laptop"));
+  const c = await d.cfg();
+  assert.equal(j.status, "active");
+  assert.equal(c.sync_status, "active");
+  assert.ok(c.just_connected > 0, "the popup can say Connected Successfully");
+  assert.equal(c.session_id, j.sessionId);
+  assert.equal(c.confirm_code, "", "no confirmation step");
+  await d.flush(d.snap("i1", "vidI1"));
+  assert.equal((await d.sync()).pushed, 1);
+  const dev = (await owner("GET", "/api/devices")).json().find(x => x.id === j.deviceId);
+  assert.deepEqual([dev.status, dev.connection, dev.online, dev.active_sessions, dev.client_version], ["active", "online", true, 1, "0.5.0"]);
+});
+
+test("pairing with an approval-required code: pending, shows the owner a confirmation code, and uploads NOTHING until approved", async () => {
   const d = makeDevice({ server, name: "pending-one" });
-  const j = await d.pair(await newCode("Pending laptop"));
+  const j = await d.pair(await newCode("Pending laptop", true));
   const c = await d.cfg();
   assert.equal(c.sync_status, "pending");
   assert.match(c.confirm_code, /^[0-9A-F]{4}-[0-9A-F]{4}$/);
@@ -263,7 +278,7 @@ test("history recorded before pairing is not uploaded unless the user opts in", 
   await quiet.flush(quiet.snap("old1", "vidOld1"));                 // recorded while not paired: never queued
   assert.equal(await quiet.outboxCount(), 0);
   quiet.id = (await quiet.pair(await newCode("NoHistory"))).deviceId;
-  await approve(quiet.id); await quiet.sync();
+  await quiet.sync();
   assert.equal(rows(quiet.id).length, 0);
   await quiet.flush(quiet.snap("new1", "vidNew1"));
   assert.equal((await quiet.sync()).pushed, 1, "new activity does sync");
@@ -271,7 +286,6 @@ test("history recorded before pairing is not uploaded unless the user opts in", 
   const full = makeDevice({ server, name: "WithHistory" });
   await full.flush(full.snap("oldA", "vidOldA")); await full.flush(full.snap("oldB", "vidOldB"));
   full.id = (await full.pair(await newCode("WithHistory"), { uploadHistory: true })).deviceId;
-  await approve(full.id);
   assert.equal((await full.sync()).pushed, 2);
 });
 
@@ -304,14 +318,60 @@ test("retention never deletes sessions that are still waiting to be uploaded", a
   assert.equal((await d.db().deleteSessionsBefore(Date.now() - 7 * 86400000, new Set())).join(), "vidRet1", "deletable once uploaded");
 });
 
-test("unenrolling stops sending and tells the server", async () => {
+test("delete session: the device only REQUESTS it; the session keeps syncing until the owner approves", async () => {
   const d = await pairedDevice("Leaving");
   await d.flush(d.snap("lv", "vidLv")); await d.sync();
-  await d.unenroll();
-  assert.equal((await d.cfg()).sync_server, "");
-  assert.equal(ctx.db.prepare("SELECT status FROM devices WHERE id=?").get(d.id).status, "revoked");
+  const r = await d.requestDeletion();
+  assert.equal(r.status, "pending");
+  assert.equal((await d.cfg()).session_request.status, "pending", "the popup shows Waiting for Admin Approval");
+  const again = await d.requestDeletion();
+  assert.equal(again.id, r.id, "asking twice does not create a second request");
+  assert.equal(ctx.db.prepare("SELECT COUNT(*) n FROM session_deletion_requests WHERE device_id=?").get(d.id).n, 1);
+
+  // Still connected while waiting.
   await d.flush(d.snap("lv2", "vidLv2"));
-  assert.equal(await d.outboxCount(), 0, "nothing is queued once unpaired");
+  assert.equal((await d.sync()).pushed, 1, "the session stays active until approval");
+  assert.equal((await d.cfg()).sync_server, server);
+
+  // The owner approves: the session is revoked and the device learns why on its next contact.
+  const list = (await owner("GET", "/api/session-requests?status=pending")).json();
+  assert.equal(list.length, 1); assert.equal(list[0].label, "Leaving"); assert.equal(list[0].sessionId, d.store.session_id);
+  assert.equal((await owner("POST", `/api/session-requests/${r.id}/approve`)).statusCode, 200);
+  const res = await d.sync();
+  assert.deepEqual([res.revoked, res.kind], [true, "deleted"]);
+  const c = await d.cfg();
+  assert.equal(c.sync_server, ""); assert.equal(c.device_refresh, "");
+  assert.match(c.sync_notice, /admin approved your request/);
+  await d.flush(d.snap("lv3", "vidLv3"));
+  assert.equal(await d.outboxCount(), 0, "nothing is queued once the session is deleted");
+  const dev = (await owner("GET", "/api/devices")).json().find(x => x.id === d.id);
+  assert.deepEqual([dev.connection, dev.active_sessions], ["disconnected", 0]);
+});
+
+test("delete session denied: the session stays active and the device is told", async () => {
+  const d = await pairedDevice("Staying");
+  const r = await d.requestDeletion();
+  assert.equal((await owner("POST", `/api/session-requests/${r.id}/deny`)).statusCode, 200);
+  assert.equal((await owner("POST", `/api/session-requests/${r.id}/approve`)).statusCode, 409, "a decided request can't be approved later");
+  await d.flush(d.snap("st", "vidSt"));
+  assert.equal((await d.sync()).pushed, 1, "still connected");
+  assert.equal((await d.cfg()).session_request.status, "denied", "the device picked up the decision on its next sync");
+  const r2 = await d.requestDeletion();
+  assert.notEqual(r2.id, r.id, "after a denial the device may ask again");
+});
+
+test("a device that re-pairs after its session was deleted gets its device record and history back", async () => {
+  const d = await pairedDevice("Returning");
+  await d.flush(d.snap("rt1", "vidRt1")); await d.sync();
+  const r = await d.requestDeletion();
+  await owner("POST", `/api/session-requests/${r.id}/approve`);
+  await d.sync();
+  const j = await d.pair(await newCode("Returning"));
+  assert.equal(j.deviceId, d.id, "same device");
+  assert.notEqual(j.sessionId, r.sessionId, "new session");
+  assert.equal(rows(d.id).length, 1, "history kept");
+  const pairings = (await owner("GET", "/api/pairing-codes")).json().filter(p => p.device_id === d.id);
+  assert.equal(pairings.length, 2, "both pairings appear in the history");
 });
 
 test("upgrade from v0.3: an already-paired device keeps syncing without re-pairing, and unsent sessions are queued", async () => {

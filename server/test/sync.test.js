@@ -126,13 +126,16 @@ test("push stores only whitelisted, bounded fields, and only canonical YouTube u
   assert.equal(byId.s4.kind, "shorts");
 });
 
-test("device-initiated unenroll revokes the device and is audited", async () => {
+test("an older extension's unenroll no longer ends the session: it files a deletion request for the owner", async () => {
   const { app, A, dev, push } = await setup();
-  assert.equal((await app.inject({ method: "POST", url: "/api/sync/unenroll", headers: dev.auth, payload: {} })).statusCode, 200);
-  assert.equal((await push([session("s1", "v1")])).statusCode, 403);
-  const actions = (await app.inject({ method: "GET", url: "/api/audit", headers: { cookie: A } })).json().map(r => r.action);
-  assert.ok(actions.includes("device_unenrolled"));
-  assert.equal((await app.inject({ method: "GET", url: "/api/devices", headers: { cookie: A } })).json()[0].status, "revoked");
+  const r = await app.inject({ method: "POST", url: "/api/sync/unenroll", headers: dev.auth, payload: {} });
+  assert.deepEqual([r.statusCode, r.json().requested], [200, true]);
+  assert.equal((await push([session("s1", "v1")])).statusCode, 200, "still active until the owner approves");
+  const actions = (await app.inject({ method: "GET", url: "/api/audit", headers: { cookie: A } })).json().map(x => x.action);
+  assert.ok(actions.includes("session_deletion_requested"));
+  const reqs = (await app.inject({ method: "GET", url: "/api/session-requests", headers: { cookie: A } })).json();
+  assert.deepEqual([reqs.length, reqs[0].status, reqs[0].id], [1, "pending", r.json().requestId]);
+  assert.equal((await app.inject({ method: "GET", url: "/api/devices", headers: { cookie: A } })).json()[0].status, "active");
 });
 
 test("push updates the device's last_seen", async () => {

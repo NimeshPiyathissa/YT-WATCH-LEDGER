@@ -22,6 +22,12 @@ export function ownDevice(db, req, reply, fn) {
   return fn(d);
 }
 
+// Pairing codes are hashed without separators or case, so "abcd-efgh", "ABCD EFGH" and "ABCDEFGH" are the same code.
+export function normalizePairingCode(code) {
+  const c = String(code || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return c.length >= 6 && c.length <= 32 ? c : null;
+}
+
 // A short code both the device and the owner's dashboard show, derived from the device id, so the owner can
 // confirm the device in front of them is the one asking for approval.
 export function confirmCodeFor(device) {

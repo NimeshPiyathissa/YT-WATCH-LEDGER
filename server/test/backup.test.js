@@ -14,7 +14,7 @@ function seededDb(dir) {
   migrate(db);
   const admin = uuid();
   db.prepare("INSERT INTO admins(id,email,pw_hash,created_at) VALUES (?,?,?,?)").run(admin, "o@example.com", "x", 1);
-  for (let i = 0; i < 3; i++) db.prepare("INSERT INTO devices(id,admin_id,label,token_hash,status,enrolled_at) VALUES (?,?,?,?,?,?)").run(uuid(), admin, "Device " + i, "h" + i, "active", 1);
+  for (let i = 0; i < 3; i++) db.prepare("INSERT INTO devices(id,admin_id,label,status,enrolled_at) VALUES (?,?,?,?,?)").run(uuid(), admin, "Device " + i, "active", 1);
   return { db, file };
 }
 const count = (db, t) => db.prepare(`SELECT COUNT(*) n FROM ${t}`).get().n;
@@ -121,7 +121,7 @@ test("restoring an older backup and starting the server upgrades it by running t
   db1.prepare("INSERT INTO schema_migrations(name,applied_at) VALUES ('001_init.sql',1)").run();
   db1.close();
   const db2 = openDb(file);
-  assert.deepEqual(migrate(db2), ["002_retention.sql", "003_single_owner_pairing.sql"]);
+  assert.deepEqual(migrate(db2), ["002_retention.sql", "003_single_owner_pairing.sql", "004_device_sessions.sql"]);
   assert.ok(db2.prepare("SELECT 1 FROM sqlite_master WHERE name='settings'").get());
   db2.close();
 });

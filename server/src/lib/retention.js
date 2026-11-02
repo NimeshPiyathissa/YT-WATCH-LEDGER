@@ -52,12 +52,13 @@ export function purgeAll(db, now = Date.now()) {
   return db.prepare("SELECT id FROM devices").all().reduce((n, d) => n + purgeDevice(db, d.id, now), 0);
 }
 
-// A device that asked to pair but was never approved is removed after a day.
+// A device that asked to pair but was never approved is removed after a day. (A device that was approved before and
+// re-paired with an approval-required code keeps its history; it just stays pending.)
 export function expirePending(db, now = Date.now(), ttlMs = 24 * 3600 * 1000) {
-  return db.prepare("DELETE FROM devices WHERE status='pending' AND enrolled_at<?").run(now - ttlMs).changes;
+  return db.prepare("DELETE FROM devices WHERE status='pending' AND approved_at IS NULL AND enrolled_at<?").run(now - ttlMs).changes;
 }
-// Housekeeping: expired pairing codes and old audit entries.
+// Housekeeping: pairing codes (kept 90 days as pairing history; they are hashed and long expired) and old audit entries.
 export function purgeHousekeeping(db, now = Date.now(), auditDays = 365) {
-  db.prepare("DELETE FROM enroll_codes WHERE expires_at<?").run(now - 24 * 3600 * 1000);
+  db.prepare("DELETE FROM enroll_codes WHERE expires_at<?").run(now - 90 * 86400000);
   db.prepare("DELETE FROM audit_log WHERE created_at<?").run(now - auditDays * 86400000);
 }

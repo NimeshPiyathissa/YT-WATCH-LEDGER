@@ -1,6 +1,7 @@
 import { encryptJSON } from "../lib/crypto.js";
-import { cleanSession, audit } from "../lib/helpers.js";
+import { cleanSession } from "../lib/helpers.js";
 import { purgeDevice, recomputeVideo } from "../lib/retention.js";
+import { fileDeletionRequest } from "../lib/sessions.js";
 
 const REDELIVER_AFTER_MS = 60 * 1000; // delivered-but-unacked commands are re-sent after this
 const SKEW_IGNORE_MS = 2 * 60 * 1000; // smaller differences are request latency / rounding, not a wrong clock
@@ -53,11 +54,11 @@ export default async function (app, { db }) {
     return { ok: true, upserted: sessions.length, acked: sessions.map(s => ({ sessionId: s.sessionId, rev: s.rev })), rejected, serverNow: now, skewMs: skew };
   });
 
-  // The person at the device chose to stop sending. Mark it revoked (data stays until the owner deletes it).
+  // Kept for extensions older than 0.5, whose "Unpair" called this. A device can no longer end its own session:
+  // this files a deletion request for the owner to approve, exactly like the extension's "Delete session" button.
   app.post("/api/sync/unenroll", req => {
-    db.prepare("UPDATE devices SET status='revoked' WHERE id=?").run(req.device.id);
-    audit(db, req.device.admin_id, req.device.id, "device_unenrolled", req.ip);
-    return { ok: true };
+    const r = fileDeletionRequest(db, app.hub, { device: req.device, session: req.deviceSession, reason: "unpair requested by an older extension", ip: req.ip });
+    return { ok: true, requested: true, requestId: r.request.id };
   });
 
   app.get("/api/sync/commands", req => {

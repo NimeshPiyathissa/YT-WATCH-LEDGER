@@ -47,9 +47,9 @@ test("the long-lived refresh credential is useless for syncing; only a short-liv
 test("expired, forged and unknown-device access tokens are 401; the client is told to refresh", async () => {
   const { app, dev } = await setup();
   const call = token => app.inject({ method: "POST", url: "/api/sync/push", headers: { authorization: "Bearer " + token }, payload: { sessions: [] } });
-  assert.equal((await call(signDeviceAccess(dev.deviceId, Date.now() - 3600 * 1000))).json().error, "token_invalid");
-  assert.equal((await call(signDeviceAccess(dev.deviceId) + "x")).json().error, "token_invalid");
-  assert.equal((await call(signDeviceAccess("00000000-0000-0000-0000-000000000000"))).json().error, "bad_token");
+  assert.equal((await call(signDeviceAccess(dev.deviceId, dev.sessionId, Date.now() - 3600 * 1000))).json().error, "token_invalid");
+  assert.equal((await call(signDeviceAccess(dev.deviceId, dev.sessionId) + "x")).json().error, "token_invalid");
+  assert.equal((await call(signDeviceAccess("00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000000"))).json().error, "bad_token");
 });
 
 test("token endpoint: wrong credential is 401; a valid one returns a short-lived token", async () => {
@@ -115,10 +115,13 @@ test("pairing codes are single-use and expire", async () => {
   assert.equal((await app.inject({ method: "POST", url: "/api/enroll", payload: { code: "NOPE" } })).statusCode, 400);
 });
 
-test("audit log records pairing, approval, revoke and command enqueue", async () => {
+test("audit log records pairing, approval, revoke, command enqueue and failed pairing attempts", async () => {
   const { app, A, dev } = await setup();
+  const pending = await enrollDevice(app, A, "Needs approval", { approve: false });
+  await as(app, A, "POST", `/api/devices/${pending.deviceId}/approve`);
   await as(app, A, "POST", `/api/devices/${dev.deviceId}/commands`, { type: "pause_tracking" });
   await as(app, A, "POST", `/api/devices/${dev.deviceId}/revoke`);
+  await app.inject({ method: "POST", url: "/api/enroll", payload: { code: "WRONG-CODE" } });
   const actions = (await as(app, A, "GET", "/api/audit")).json().map(r => r.action);
-  for (const a of ["login", "pairing_code_created", "pair_requested", "approve", "enqueue:pause_tracking", "revoke"]) assert.ok(actions.includes(a), a);
+  for (const a of ["login", "pairing_code_created", "pair_completed", "pair_requested", "approve", "enqueue:pause_tracking", "revoke", "pairing_failed"]) assert.ok(actions.includes(a), a);
 });

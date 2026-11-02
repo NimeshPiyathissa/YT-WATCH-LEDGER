@@ -42,9 +42,9 @@ test("tampered or expired access cookie is rejected", async () => {
 test("owner and device tokens are not interchangeable", () => {
   const id = uuid();
   assert.equal(verifyDeviceAccess(signAccess(id)), null, "owner token is not a device token");
-  assert.equal(verifyAccess(signDeviceAccess(id)), null, "device token is not an owner token");
-  assert.equal(verifyDeviceAccess(signDeviceAccess(id, Date.now() - 3600 * 1000)), null, "expired device token");
-  assert.equal(verifyDeviceAccess(signDeviceAccess(id)), id);
+  assert.equal(verifyAccess(signDeviceAccess(id, "sid")), null, "device token is not an owner token");
+  assert.equal(verifyDeviceAccess(signDeviceAccess(id, "sid", Date.now() - 3600 * 1000)), null, "expired device token");
+  assert.equal(verifyDeviceAccess(signDeviceAccess(id, "sid")), id);
 });
 
 test("refresh rotates the token; replaying the old one revokes the whole family", async () => {
