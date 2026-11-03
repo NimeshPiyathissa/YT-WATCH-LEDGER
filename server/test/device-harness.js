@@ -16,7 +16,8 @@ export function makeDevice({ server, name, clockSkewMs = 0, realtime = false }) 
   // State that survives a "browser restart": storage, IndexedDB and the (injectable) network conditions.
   const store = { install_id: "inst-" + name };
   const idb = new IDBFactory();
-  const net = { offline: false, loseResponses: 0, loseEventResponses: 0, expireAccessOnce: false, log: [], mock: {} }; // mock: { "/api/path": () => Response } overrides one server answer
+  const net = { offline: false, loseResponses: 0, loseEventResponses: 0, expireAccessOnce: false, log: [], mock: {} }; // mock: { "/api/path": (opts) => Response | undefined } overrides one server answer (undefined = ask the real server)
+  const timers = []; // delays (ms) the extension asked setTimeout for: lets a test see what it scheduled without running it
   let ctx = null, onMessage = null, startups = [];
   const alarms = {};
 
@@ -53,7 +54,7 @@ export function makeDevice({ server, name, clockSkewMs = 0, realtime = false }) 
         net.expireAccessOnce = false; net.log.push([p, 401]);
         return new Response(JSON.stringify({ error: "token_invalid" }), { status: 401 });
       }
-      if (net.mock[p]) { const m = net.mock[p](); net.log.push([p, m.status]); return m; }
+      if (net.mock[p]) { const m = net.mock[p](opts); if (m) { net.log.push([p, m.status]); return m; } }
       const res = await fetch(url, opts);
       net.log.push([p, res.status]);
       // The server processed the request but the device never sees the answer (connection dropped mid-response).
@@ -64,7 +65,7 @@ export function makeDevice({ server, name, clockSkewMs = 0, realtime = false }) 
     const sandbox = {
       chrome, indexedDB: idb, IDBKeyRange, fetch: fetchWrapped, URL, URLSearchParams, AbortController, console, crypto: globalThis.crypto,
       Date: SkewedDate, navigator: { platform: "TestOS" }, ...(realtime ? { WebSocket: globalThis.WebSocket } : {}),
-      setTimeout: () => 0, clearTimeout: () => {}, // no background timers: tests trigger syncs explicitly
+      setTimeout: (_f, ms) => { timers.push(ms); return 0; }, clearTimeout: () => {}, // no background timers run: tests trigger syncs explicitly (the delays asked for are recorded in dev.timers)
       setInterval: () => 0, clearInterval: () => {},
       importScripts: (...files) => files.forEach(f => vm.runInContext(read(f), sandbox, { filename: f }))
     };
@@ -76,7 +77,11 @@ export function makeDevice({ server, name, clockSkewMs = 0, realtime = false }) 
 
   const send = (msg, sender = {}) => new Promise(res => { const r = onMessage(msg, sender, res); if (r !== true) res(undefined); });
   const dev = {
-    name, store, net, alarms,
+    name, store, net, alarms, timers,
+    // Any message the popup / content script can send to the service worker.
+    message: msg => send(msg),
+    queued: () => ctx.YTDB.evOutboxCount(),
+    policy: () => ctx.YTSyncPolicy,
     // The tracker content script's snapshot, delivered like a real SESSION_FLUSH message.
     flush: snapshot => send({ type: "SESSION_FLUSH", snapshot: { ...snapshot } }),
     sync: () => send({ type: "SYNC_NOW" }),

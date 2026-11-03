@@ -195,6 +195,7 @@ test("revocation stops event upload and clears the queue", async () => {
 
 test("real-time: the owner's open dashboard is told about each pause and resume as the device uploads them", async () => {
   const d = await pairedDevice();
+  d.store.live_view = true; // the person at this device allowed live viewing in the extension popup
   const admin = ctx.db.prepare("SELECT admin_id FROM devices WHERE id=?").get(d.id).admin_id;
   const got = [];
   const unsub = ctx.app.hub.subscribeAdmin(admin, (type, data) => { if (type === "video_event") got.push(...data.events.map(e => e.type)); });
