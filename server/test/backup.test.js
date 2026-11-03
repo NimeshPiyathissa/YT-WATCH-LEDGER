@@ -134,7 +134,7 @@ test("restoring an older backup and starting the server upgrades it by running t
   db1.prepare("INSERT INTO schema_migrations(name,applied_at) VALUES ('001_init.sql',1)").run();
   db1.close();
   const db2 = openDb(file);
-  assert.deepEqual(migrate(db2), ["002_retention.sql", "003_single_owner_pairing.sql", "004_device_sessions.sql", "005_device_config.sql"]);
+  assert.deepEqual(migrate(db2), ["002_retention.sql", "003_single_owner_pairing.sql", "004_device_sessions.sql", "005_device_config.sql", "006_video_events.sql"]);
   assert.ok(db2.prepare("SELECT 1 FROM sqlite_master WHERE name='settings'").get());
   db2.close();
 });

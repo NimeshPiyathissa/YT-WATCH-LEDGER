@@ -1,6 +1,7 @@
 // Retention, cleanup and per-video rollup maintenance for the server copy.
 import { encryptJSON, decryptJSON } from "./crypto.js";
 import acc from "./accounting.cjs";
+import { deleteVideoEvents } from "./videoEvents.js";
 
 export const thumb = id => "https://i.ytimg.com/vi/" + id + "/mqdefault.jpg";
 
@@ -41,6 +42,7 @@ export function purgeDevice(db, deviceId, now = Date.now()) {
   if (!(days > 0)) return 0;
   const cutoff = now - days * 86400000;
   return db.transaction(() => {
+    deleteVideoEvents(db, deviceId, 0, cutoff); // event history ages out with the sessions it belongs to
     const affected = db.prepare("SELECT DISTINCT video_id FROM sessions WHERE device_id=? AND start_ts_adj<?").all(deviceId, cutoff).map(r => r.video_id);
     if (!affected.length) return 0;
     const removed = db.prepare("DELETE FROM sessions WHERE device_id=? AND start_ts_adj<?").run(deviceId, cutoff).changes;

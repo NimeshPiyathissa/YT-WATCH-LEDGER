@@ -18,6 +18,7 @@ import dataRoutes from "./routes/data.js";
 import deviceSessionRoutes from "./routes/deviceSessions.js";
 import eventRoutes from "./routes/events.js";
 import deviceConfigRoutes from "./routes/deviceConfig.js";
+import videoIngestRoutes from "./routes/videoIngest.js";
 import { createHub } from "./lib/realtime.js";
 
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "web");
@@ -68,6 +69,7 @@ export async function buildApp({ db, logger = false, https = null, config = {} }
   await app.register(deviceSessionRoutes, { db });
   await app.register(eventRoutes, { db });
   await app.register(deviceConfigRoutes, { db });
+  await app.register(videoIngestRoutes, { db });
   await app.register(fastifyStatic, { root: WEB }); // admin SPA (PART B §B7)
 
   app.get("/api/health", async () => ({ ok: true }));

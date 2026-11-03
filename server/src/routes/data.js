@@ -4,6 +4,7 @@ import { summarize } from "../lib/aggregate.js";
 import { audit } from "../lib/helpers.js";
 import { recomputeVideo, getGlobalRetention, setGlobalRetention, purgeAll } from "../lib/retention.js";
 import { createBackup, listBackups } from "../lib/backup.js";
+import { deleteVideoEvents } from "../lib/videoEvents.js";
 
 const MAX_ROWS = 200000;
 
@@ -92,6 +93,8 @@ export default async function (app, { db, config }) {
     const del = db.prepare("DELETE FROM sessions WHERE device_id=? AND session_id=?");
     db.transaction(() => {
       for (const r of rows) del.run(r.device_id, r.session_id);
+      const devs = db.prepare("SELECT id FROM devices WHERE admin_id=? AND (? IS NULL OR id=?)").all(req.admin.id, f.device, f.device);
+      for (const d of devs) deleteVideoEvents(db, d.id, f.from, f.to); // playback events of the same period
       for (const k of new Set(rows.map(r => r.device_id + "\u0000" + r.video_id))) { const [d, v] = k.split("\u0000"); recomputeVideo(db, d, v); }
     })();
     audit(db, req.admin.id, f.device, "delete_data", req.ip, { device: f.device || "all", from: b.from ?? null, to: b.to ?? null, sessions: rows.length });

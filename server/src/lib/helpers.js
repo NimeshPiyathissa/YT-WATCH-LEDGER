@@ -40,6 +40,9 @@ const num = v => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.floor(Numb
 // Only canonical YouTube links are stored (and later rendered as links), so a hostile value can't smuggle in a javascript: URL.
 const ytUrl = v => (typeof v === "string" && /^https:\/\/www\.youtube\.com\/(watch\?v=|shorts\/)[\w-]{1,32}$/.test(v) ? v : "");
 
+// A channel link is stored only in one of YouTube's own shapes (/@handle, /channel/UC..., /c/name, /user/name).
+const ytChannelUrl = v => (typeof v === "string" && /^https:\/\/www\.youtube\.com\/(@[\w.\-%]{1,100}|channel\/UC[\w-]{22}|c\/[\w.\-%]{1,100}|user\/[\w.\-%]{1,100})$/.test(v) ? v : "");
+
 // Whitelist + bound a session sent by a device; returns null if unusable.
 export function cleanSession(s) {
   if (!s || typeof s.sessionId !== "string" || !/^[\w-]{1,64}$/.test(s.sessionId)) return null;
@@ -49,6 +52,7 @@ export function cleanSession(s) {
     title: str(s.title, 300), channel: str(s.channel, 200),
     startTs: num(s.startTs), endTs: s.endTs ? num(s.endTs) : null,
     watchedMs: num(s.watchedMs), duration: num(s.duration),
+    channelUrl: ytChannelUrl(s.channelUrl), channelId: typeof s.channelId === "string" && /^UC[\w-]{22}$/.test(s.channelId) ? s.channelId : "",
     startSec: s.startSec == null ? null : num(s.startSec), positionSec: num(s.positionSec), furthestSec: num(s.furthestSec),
     seeks: num(s.seeks), rewinds: num(s.rewinds), pauses: num(s.pauses), completed: s.completed === true,
     rev: num(s.rev), updatedAt: num(s.updatedAt) || Date.now()

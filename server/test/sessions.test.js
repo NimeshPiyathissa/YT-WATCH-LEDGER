@@ -207,7 +207,7 @@ test("upgrade: a device paired before device sessions existed keeps working with
   db.prepare("INSERT INTO devices(id,admin_id,label,token_hash,status,enrolled_at,approved_at,client_version) VALUES ('old-dev',?,'Old laptop',?,'active',1,1,'0.4.0')").run(admin, sha256("old-credential"));
   db.prepare("INSERT INTO devices(id,admin_id,label,token_hash,status,enrolled_at) VALUES ('gone-dev',?,'Revoked one',?,'revoked',1)").run(admin, sha256("revoked-credential"));
   db.prepare("INSERT INTO enroll_codes(code_hash,admin_id,label,expires_at,used_at) VALUES ('h',?,'old code',?,?)").run(admin, Date.now(), Date.now());
-  assert.deepEqual(migrate(db), ["004_device_sessions.sql", "005_device_config.sql"]);
+  assert.deepEqual(migrate(db), ["004_device_sessions.sql", "005_device_config.sql", "006_video_events.sql"]);
 
   const app = await buildApp({ db }); await app.ready();
   const ok = await app.inject({ method: "POST", url: "/api/device/token", headers: { authorization: "Bearer old-credential" } });

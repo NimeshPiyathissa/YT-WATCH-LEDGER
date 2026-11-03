@@ -2,10 +2,9 @@ import { encryptJSON } from "../lib/crypto.js";
 import { cleanSession } from "../lib/helpers.js";
 import { purgeDevice, recomputeVideo } from "../lib/retention.js";
 import { fileDeletionRequest } from "../lib/sessions.js";
+import { measureSkew } from "../lib/videoEvents.js";
 
 const REDELIVER_AFTER_MS = 60 * 1000; // delivered-but-unacked commands are re-sent after this
-const SKEW_IGNORE_MS = 2 * 60 * 1000; // smaller differences are request latency / rounding, not a wrong clock
-const SKEW_MAX_MS = 400 * 24 * 3600 * 1000; // a clock more than ~13 months off is treated as garbage and ignored
 
 export default async function (app, { db }) {
   app.addHook("preHandler", app.authDevice);
@@ -30,12 +29,7 @@ export default async function (app, { db }) {
       .map(s => ({ sessionId: s.sessionId.slice(0, 64), rev: Number(s.rev) || 0 }));
 
     // Put this device's clock on the server's: skew = server time - device time, measured when the device uploads.
-    const clientNow = Number(body.clientNow);
-    let skew = dev.clock_skew_ms || 0;
-    if (Number.isFinite(clientNow) && clientNow > 0) {
-      const raw = now - clientNow;
-      skew = Math.abs(raw) < SKEW_IGNORE_MS ? 0 : (Math.abs(raw) > SKEW_MAX_MS ? skew : raw);
-    }
+    const skew = measureSkew(dev.clock_skew_ms, body.clientNow, now);
 
     const touched = new Set();
     db.transaction(() => {
