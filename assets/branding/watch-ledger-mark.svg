@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="512" height="512" role="img" aria-label="Watch Ledger mark">
+  <title>Watch Ledger</title>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4fe3cf"/><stop offset="1" stop-color="#14a595"/></linearGradient></defs>
+  <!-- the product's own mark: three rising bars on a teal tile (same proportions as the dashboard's .mark) -->
+  <rect width="120" height="120" rx="29" fill="url(#g)"/>
+  <rect x="25" y="62" width="19" height="33" rx="4" fill="#03201c"/>
+  <rect x="50.5" y="25" width="19" height="70" rx="4" fill="#03201c"/>
+  <rect x="76" y="46" width="19" height="49" rx="4" fill="#03201c"/>
+</svg>

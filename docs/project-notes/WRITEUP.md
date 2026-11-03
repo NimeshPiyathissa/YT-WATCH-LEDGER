@@ -1,5 +1,7 @@
 # Consent-Preserving Watch-Time Tracking for YouTube: Design and Implementation of a Browser Extension with Opt-In Remote Administration
 
+> **Project notes.** This is background material from the project's academic origins, kept for reference. It is not needed to install or run Watch Ledger. Start at the [README](../../README.md).
+
 *Educational project report.*
 
 *See also [ANALYSIS.md](ANALYSIS.md) for the analytical companion on consent and the limits of technical enforcement.*

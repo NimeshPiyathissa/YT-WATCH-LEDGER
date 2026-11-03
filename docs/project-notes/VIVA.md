@@ -1,5 +1,7 @@
 # Demo & Viva Script — YouTube Watch Tracker
 
+> **Project notes.** This is background material from the project's academic origins, kept for reference. It is not needed to install or run Watch Ledger. Start at the [README](../../README.md).
+
 A ~10–12 minute presentation plan. Each demo step says **what to show**, **the point it proves**, and **where it's argued** (`ANALYSIS.md` / `WRITEUP.md` §). Everything runs on your own machine against **synthetic devices** (`server/scripts/sim-device.js`, which sends fabricated sessions and never reads anyone's browsing). State that up front.
 
 ---

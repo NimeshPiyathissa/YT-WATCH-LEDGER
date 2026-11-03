@@ -1,5 +1,7 @@
 # Design Study — Dual-Control Enrollment
 
+> **Project notes.** This is background material from the project's academic origins, kept for reference. It is not needed to install or run Watch Ledger. Start at the [README](../../README.md).
+
 *Future-work chapter for the YouTube Watch Tracker project. Companion to [ANALYSIS.md](ANALYSIS.md)
 (§4–5) and [WRITEUP.md](WRITEUP.md) (§8). **This is a design analysis, not an implemented feature:**
 nothing described here exists in the code, and §5.5 lists what building it would touch.*

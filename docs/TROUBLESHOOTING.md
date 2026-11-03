@@ -62,3 +62,15 @@ Start with the extension's **Device info → Diagnostics** (last 80 events, with
 | Server won't start after upgrading, or old and new versions disagree about the database | Migration `004_device_sessions.sql` is one-way. Run the new version, or restore the pre-upgrade backup ([`OPERATIONS.md`](OPERATIONS.md)). |
 | `npm test` runs out of memory | Run the files one at a time: `node --test --test-concurrency=1 "test/**/*.test.js"` from `server/`, or a single file such as `node --test test/sessions.test.js`. |
 | Everyone is locked out of pairing at once | The proxy's address is being counted as the client. Set `TRUST_PROXY=true` and forward `X-Forwarded-For`. |
+
+## Installer and maintenance scripts
+
+| Symptom | Cause and fix |
+|---|---|
+| Installer stops with exit code 3 and a DNS message | The domain does not point at this server yet. See [`DOMAIN_SETUP.md`](DOMAIN_SETUP.md), fix the record, then `sudo ./scripts/install.sh --resume`. |
+| Installer fails at a step | Fix the cause named in the message and run `sudo ./scripts/install.sh --resume`. The log is `/var/log/watch-ledger-install.log`. Nothing already created is overwritten. |
+| "Let's Encrypt rate limit" | Wait, or test with `--staging-cert`. See [`SSL_SETUP.md`](SSL_SETUP.md). |
+| Dashboard shows `bad_origin` after sign-in | Open it at exactly `BASE_URL` (same `https://`, host and port). |
+| Service will not start | `journalctl -u watch-ledger -n 80 --no-pager`; the message names the missing or invalid setting in `/etc/watch-ledger/watch-ledger.env`. Never regenerate `MASTER_KEY` on a server that has data. |
+| Health check reports a warning | `./scripts/health-check.sh` says which check (service, port, API, certificate expiry, disk, backup age). |
+| Update rolled back | The previous release is running again; read the message and see [`BACKUP_RECOVERY.md`](BACKUP_RECOVERY.md#if-something-was-interrupted). |

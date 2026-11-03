@@ -12,3 +12,13 @@ sim-devices.json
 
 # build output (tools/build-extension.mjs)
 dist/
+
+# databases, backups and release staging must never be committed
+*.db
+*.db-wal
+*.db-shm
+*.db.pre-restore-*
+backups/
+release-staging/
+*.key
+key-file*

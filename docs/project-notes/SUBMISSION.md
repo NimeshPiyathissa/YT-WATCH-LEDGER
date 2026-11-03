@@ -1,5 +1,7 @@
 # Submission Index — YouTube Watch Tracker
 
+> **Project notes.** This is background material from the project's academic origins, kept for reference. It is not needed to install or run Watch Ledger. Start at the [README](../../README.md).
+
 A consent-aware YouTube activity monitor (local-first Chrome extension + optional
 self-hosted admin backend), built to study a single question: **where can consent to
 monitoring be enforced — in the software, or only in the deployment around it?**
@@ -15,11 +17,11 @@ limit; the demo runs against synthetic devices only, so no real person is ever a
 ## Start here (suggested reading order for a marker)
 
 1. **This file** — what's included and how to run it.
-2. **[`docs/ANALYSIS.md`](docs/ANALYSIS.md)** — the core argument: why consent can't live inside the app, which controls partly help, and how real products (Family Link, MDM) differ.
-3. **[`docs/WRITEUP.md`](docs/WRITEUP.md)** — the systems report: architecture, data model, sync protocol, security model, testing, limitations.
-4. **[`docs/DUAL_CONTROL.md`](docs/DUAL_CONTROL.md)** — future-work *design study* (not implemented): making the subject a required cryptographic party to enrolment, and why even that leans on an out-of-band root of trust (evidence *for* the thesis).
-5. **[`SECURITY.md`](SECURITY.md)** — controls the code enforces and tests vs. assurances only the operator can provide.
-6. **[`docs/VIVA.md`](docs/VIVA.md)** — the live-demo / presentation script and Q&A prep.
+2. **[`ANALYSIS.md`](ANALYSIS.md)** — the core argument: why consent can't live inside the app, which controls partly help, and how real products (Family Link, MDM) differ.
+3. **[`WRITEUP.md`](WRITEUP.md)** — the systems report: architecture, data model, sync protocol, security model, testing, limitations.
+4. **[`DUAL_CONTROL.md`](DUAL_CONTROL.md)** — future-work *design study* (not implemented): making the subject a required cryptographic party to enrolment, and why even that leans on an out-of-band root of trust (evidence *for* the thesis).
+5. **[`SECURITY.md`](../../SECURITY.md)** — controls the code enforces and tests vs. assurances only the operator can provide.
+6. **[`VIVA.md`](VIVA.md)** — the live-demo / presentation script and Q&A prep.
 
 ---
 
@@ -32,10 +34,10 @@ limit; the demo runs against synthetic devices only, so no real person is ever a
 | `server/scripts/sim-device.js` | Synthetic device client (fabricated sessions, `--hostile` HTML/script payloads) | Lets the demo show a fleet, sync, commands and escaping with **no real data** |
 | `server/scripts/demo.js` | One-command local demo server (temporary DB and secrets, first admin, enrolment code) | Reproducible demo setup; deletes its data on exit |
 | `docs/DEMO.md` | Runbook for enrolling your own browser against the local demo server | Reproduce the extension-side flow on one machine |
-| `docs/VIVA.md` | 10–12 min presentation script + Q&A prep | Maps each demo step to a concept and a report section |
-| `docs/WRITEUP.md` | Systems-level report | The engineering write-up |
-| `docs/ANALYSIS.md` | Consent / threat-model analysis | The academic contribution |
-| `docs/DUAL_CONTROL.md` | Dual-control enrolment design study | Strongest in-app answer to the consent gap, with honest limits |
+| `VIVA.md` | 10–12 min presentation script + Q&A prep | Maps each demo step to a concept and a report section |
+| `WRITEUP.md` | Systems-level report | The engineering write-up |
+| `ANALYSIS.md` | Consent / threat-model analysis | The academic contribution |
+| `DUAL_CONTROL.md` | Dual-control enrolment design study | Strongest in-app answer to the consent gap, with honest limits |
 | `SECURITY.md` | Security checklist | Separates what the code guarantees from what it can't |
 | `README.md` | Project overview, permissions, data flow, limitations | Entry point for the code |
 
@@ -59,7 +61,7 @@ node scripts/sim-device.js --server http://127.0.0.1:8451 --code <CODE> --label 
 ```
 `demo.js` does the setup (secrets, migrations, first admin, closing registration) itself; the
 port defaults to 8443, so use `PORT=8451` or adjust `--server`. Then walk the dashboard per
-`docs/VIVA.md`. Ctrl+C in terminal A deletes the temporary database; delete `sim-devices.json`
+`VIVA.md`. Ctrl+C in terminal A deletes the temporary database; delete `sim-devices.json`
 afterwards. To enrol your own browser instead, follow `docs/DEMO.md`.
 
 **Extension**: `chrome://extensions` → Developer mode → Load unpacked → select this folder.
@@ -88,8 +90,8 @@ deliberate choice that applies the analysis's thesis to the project's own method
 
 ## Before submitting
 
-- [ ] Rehearse `docs/VIVA.md` once as a single timed run (timing was not validated end to end).
-- [ ] Verify the citations in `docs/WRITEUP.md` and `docs/ANALYSIS.md` — they were drafted from memory.
+- [ ] Rehearse `VIVA.md` once as a single timed run (timing was not validated end to end).
+- [ ] Verify the citations in `WRITEUP.md` and `ANALYSIS.md` — they were drafted from memory.
 - [ ] Re-run the three test suites and paste the counts into the viva.
 - [ ] Rehearse any extension-in-browser steps you plan to show live (they were never executed during development).
 - [ ] Leave `server/node_modules/` out of the archive (recreate with `npm install`); this folder is not a git repository, so there is no `.gitignore` protecting it.

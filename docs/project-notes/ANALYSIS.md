@@ -1,6 +1,8 @@
 # A Consent-Aware YouTube Activity Monitor: Architecture, Security, and the Limits of Technical Enforcement
 
-*Academic write-up accompanying the YouTube Watch Tracker project. For the systems-level report (protocol, test tables) see [WRITEUP.md](WRITEUP.md); for a runnable walkthrough see [DEMO.md](DEMO.md). This document is the analytical companion: it uses the build to examine where consent can and cannot be enforced in code.*
+> **Project notes.** This is background material from the project's academic origins, kept for reference. It is not needed to install or run Watch Ledger. Start at the [README](../../README.md).
+
+*Academic write-up accompanying the YouTube Watch Tracker project. For the systems-level report (protocol, test tables) see [WRITEUP.md](WRITEUP.md); for a runnable walkthrough see [DEMO.md](../DEMO.md). This document is the analytical companion: it uses the build to examine where consent can and cannot be enforced in code.*
 
 ---
 
