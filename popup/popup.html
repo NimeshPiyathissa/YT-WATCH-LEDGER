@@ -20,13 +20,19 @@
   <div id="remote" class="banner wait" role="status" hidden></div>
   <div id="error" class="alert bad" role="alert" hidden></div>
 
-  <!-- connection card: filled in by popup.js for each state (not connected / pending / connected) -->
+  <!-- status: one clear sentence about the connection, the reason when something is wrong, and the way out -->
+  <section id="hero" class="hero" aria-label="Connection status" aria-live="polite"></section>
+
+  <!-- pairing form when not connected; connection details when connected -->
   <section id="conn" class="card conn" aria-label="Connection"></section>
 
   <section class="card pause" aria-label="Tracking">
     <div class="what"><b>Track watch time</b><span id="trackHint">Recording YouTube watch time on this device.</span></div>
     <label class="switch"><input type="checkbox" id="trackToggle" aria-label="Track watch time"><span class="slider"></span></label>
   </section>
+
+  <!-- live viewing: off by default, only the person at this device can turn it on, and while it is on this card says so -->
+  <section id="liveCard" class="card live" aria-label="Live viewing" hidden></section>
 
   <section class="card tiles" aria-label="Watch time">
     <div class="stat"><div class="k">Today</div><div class="v num" id="today">—</div></div>
@@ -49,7 +55,9 @@
   <script src="../lib/accounting.js"></script>
   <script src="../lib/db.js"></script>
   <script src="../lib/stats.js"></script>
+  <script src="../lib/syncpolicy.js"></script>
   <script src="../lib/sync.js"></script>
+  <script src="../lib/popupmodel.js"></script>
   <script src="../lib/status.js"></script>
   <script src="popup.js"></script>
 </body>
