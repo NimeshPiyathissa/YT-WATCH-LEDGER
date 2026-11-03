@@ -61,7 +61,7 @@
     q("fmCancel").onclick = closeForm;
     const bounds = () => {
       if (!q("rgFrom").value || !q("rgTo").value) { q("fmErr").textContent = "Pick both dates."; q("fmErr").hidden = false; return null; }
-      const a = new Date(q("rgFrom").value + "T00:00:00").getTime(), b = new Date(q("rgTo").value + "T23:59:59.999").getTime();
+      const a = U.dayStart(q("rgFrom").value), b = U.dayEnd(q("rgTo").value); // Sri Lanka days
       if (a > b) { q("fmErr").textContent = "'From' is after 'To'."; q("fmErr").hidden = false; return null; }
       q("fmErr").hidden = true; return [a, b];
     };

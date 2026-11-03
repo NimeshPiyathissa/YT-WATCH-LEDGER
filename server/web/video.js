@@ -7,7 +7,7 @@
   "use strict";
   const WL = new Proxy({}, { get: (_t, k) => window.WL[k] }), P = window.YTPlayback, U = window.YTUtil, CH = window.WLVideoCharts, esc = U.escapeHtml, ic = window.YTIcons.icon;
   const $ = id => document.getElementById(id);
-  const TZ_KEY = "wl.tz", REDUCED = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const REDUCED = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const TL_STEP = 300, EVENT_LIMIT = 2000;
   const qs = o => { const p = new URLSearchParams(); for (const k of Object.keys(o)) if (o[k] !== "" && o[k] != null && o[k] !== "all") p.set(k, o[k]); const s = p.toString(); return s ? "?" + s : ""; };
   const clock = sec => { const t = Math.max(0, Math.round(sec || 0)), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(s).padStart(2, "0"); };
@@ -38,14 +38,12 @@
 
   /* ---- time ---- */
   const serverNow = () => Date.now() + (st ? st.offset : 0);
-  const tzName = () => st.tz;
-  const dDate = ts => (ts == null ? "—" : P.formatDate(ts, tzName()));
-  const dTime = (ts, ms) => (ts == null ? "—" : P.formatTime(ts, tzName(), ms));
-  const dBoth = (ts, ms) => (ts == null ? "—" : dDate(ts) + ", " + dTime(ts, ms));
+  // Every date and time on this page is Sri Lanka Standard Time (Asia/Colombo), converted from the stored UTC instant by Intl.
+  // Nothing here reads the browser's zone and nothing adds hours by hand. dBoth is the full form: "November 3, 2026 · 12:45:02 PM (SLST)".
+  const dDate = ts => (ts == null ? "—" : P.formatDate(ts, P.DISPLAY_TZ));
+  const dTime = (ts, ms) => (ts == null ? "—" : P.formatTime(ts, P.DISPLAY_TZ, ms));
+  const dBoth = (ts, ms) => (ts == null ? "—" : P.formatStamp(ts, P.DISPLAY_TZ, ms));
   const dur = ms => P.formatDuration(ms);
-  function savedTz() { try { const z = localStorage.getItem(TZ_KEY); if (z && P.validZone(z)) return z; } catch (_e) { /* private mode */ } return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; }
-  const ZONES = ["UTC", "America/Los_Angeles", "America/Denver", "America/Chicago", "America/New_York", "America/Sao_Paulo", "Europe/London", "Europe/Paris", "Europe/Berlin", "Africa/Lagos",
-    "Asia/Dubai", "Asia/Karachi", "Asia/Colombo", "Asia/Dhaka", "Asia/Bangkok", "Asia/Singapore", "Asia/Shanghai", "Asia/Tokyo", "Australia/Sydney", "Pacific/Auckland"];
 
   /* ---- filters → query ---- */
   function range() {
@@ -115,7 +113,7 @@
       if (!on) return { key: "offline", text: "DEVICE OFFLINE", sub: "Last event " + dBoth(open.metrics.lastEventAt) + ". Timers are frozen until it reconnects.", session: open, m };
       switch (open.metrics.state) {
         case "playing": return { key: "playing", text: "LIVE WATCHING", sub: "Playing at " + clock(m.lastPos + (serverNow() - open.metrics.since) / 1000 * (open.metrics.rate || 1)) + " · " + (open.metrics.rate || 1) + "×", session: open, m };
-        case "paused": return { key: "paused", text: "PAUSED — " + P.formatClock(m.currentPauseMs), sub: "Paused at " + clock(open.metrics.lastPos) + " since " + dTime(open.metrics.since), session: open, m, pausedTimer: true };
+        case "paused": return { key: "paused", text: "PAUSED — " + P.formatClock(m.currentPauseMs), sub: "Paused at " + clock(open.metrics.lastPos) + " since " + dBoth(open.metrics.since), session: open, m, pausedTimer: true };
         case "buffering": return { key: "buffering", text: "BUFFERING", sub: "Waiting for data at " + clock(open.metrics.lastPos), session: open, m };
         case "ad": return { key: "ad", text: "AD PLAYING", sub: "Not counted as watch time", session: open, m };
         case "ended": return { key: "completed", text: "COMPLETED", sub: "Reached the end at " + dBoth(open.metrics.completedAt), session: open, m };
@@ -134,7 +132,6 @@
   }
   function frame(v) {
     const devOpts = `<option value="all">All devices</option>` + WL.devices().map(d => `<option value="${esc(d.id)}">${esc(d.label || "Device")}</option>`).join("");
-    const zone = P.validZone(st.tz) ? st.tz : "UTC", zones = ZONES.includes(zone) ? ZONES : [zone].concat(ZONES);
     return `<div class="vd" id="vd">
       <a class="vd-back" href="#/videos">${ic("arrow-left")}All videos</a>
       <section class="vd-glass vd-hero" aria-labelledby="vdTitle">
@@ -144,7 +141,7 @@
           <h1 id="vdTitle" class="vd-title">${esc(v.title || v.videoId)}</h1>
           <p class="vd-meta" id="vdMeta"></p><p class="vd-sub" id="vdStatusSub"></p>
           <div class="vd-actions">
-            <label class="vd-field"><span>Time zone</span><select class="vd-input" id="vdTz">${zones.map(z => `<option value="${esc(z)}"${z === zone ? " selected" : ""}>${esc(z.replace(/_/g, " "))}</option>`).join("")}</select></label>
+            <div class="vd-field"><span>Time zone</span><span class="vd-tz" title="All times are shown in Sri Lanka Standard Time (Asia/Colombo) and stored in UTC.">Sri Lanka time · SLST (UTC+05:30)</span></div>
             <label class="vd-field"><span>Device</span><select class="vd-input" id="vdDev">${devOpts}</select></label>
             <div class="vd-menu"><button class="vd-btn" id="vdExport" type="button" aria-haspopup="true" aria-expanded="false">${ic("download")}Export</button>
               <div class="vd-pop" id="vdExportMenu" hidden role="menu"><button role="menuitem" type="button" data-ex="csv:events">Events (CSV)</button><button role="menuitem" type="button" data-ex="csv:pauses">Pauses (CSV)</button><button role="menuitem" type="button" data-ex="csv:sessions">Sessions (CSV)</button><button role="menuitem" type="button" data-ex="json">Everything (JSON)</button><button role="menuitem" type="button" data-ex="print">Report for PDF…</button></div></div>
@@ -163,7 +160,7 @@
           <label class="vd-field"><span>Viewing</span><select class="vd-input" id="fSess"><option value="">All viewings</option></select></label>
           <label class="vd-field"><span>Completion</span><select class="vd-input" id="fComp"><option value="">Any</option><option value="yes">Completed viewings</option><option value="no">Not completed</option></select></label>
           <fieldset class="vd-types"><legend>Event types</legend>${TYPES.map(t => `<label class="vd-check"><input type="checkbox" value="${t}" /><span>${esc(KIND[t][0])}</span></label>`).join("")}</fieldset>
-          <p class="vd-hint">Dates and times are read in the selected time zone. The time of day applies to the first and last date. <button class="vd-link" id="fClear" type="button">Clear all filters</button></p>
+          <p class="vd-hint">Dates and times are read in Sri Lanka time (SLST). The time of day applies to the first and last date. <button class="vd-link" id="fClear" type="button">Clear all filters</button></p>
         </form></section>
       <section class="vd-glass" aria-labelledby="vdTlH"><div class="vd-head"><h2 class="vd-h" id="vdTlH">${ic("activity")}Activity timeline</h2><div class="vd-tools"><button class="vd-btn vd-btn-sm" id="vdSort" type="button">Newest first</button></div></div>
         <p class="vd-hint" id="vdTlNote"></p><ol class="vd-tl" id="vdTl" aria-live="off"></ol><div class="vd-more"><button class="vd-btn" id="vdTlMore" type="button" hidden>Show older events</button></div></section>
@@ -243,8 +240,8 @@
     const el = $("vdConn"); if (!el) return;
     const label = { live: "LIVE", syncing: "SYNCING", offline: "OFFLINE", reconnecting: "RECONNECTING" }[st.conn];
     el.dataset.state = st.conn; $("vdConnText").textContent = label;
-    el.title = (st.lastSync ? "Last successful sync " + dBoth(st.lastSync) + " (" + st.tz + ")" : "Not synced yet") + (st.conn === "offline" ? ". This browser is offline." : "");
-    $("vdLast") && ($("vdLast").textContent = st.lastSync ? dTime(st.lastSync) : "—");
+    el.title = (st.lastSync ? "Last successful sync " + dBoth(st.lastSync) : "Not synced yet") + (st.conn === "offline" ? ". This browser is offline." : "");
+    $("vdLast") && ($("vdLast").textContent = st.lastSync ? dBoth(st.lastSync) : "—");
   }
 
   /* ---- timeline ---- */
@@ -279,12 +276,12 @@
     const relHtml = d.rel ? (d.rel.startsWith("<") ? d.rel : esc(d.rel)) : "";
     return `<li class="vd-ev ${k[2]}${st.fresh.has(e.id) ? " fresh" : ""}" data-id="${esc(e.id)}"><span class="vd-ev-n num">#${number}</span><span class="vd-ev-ic" aria-hidden="true">${ic(k[1])}</span>
       <div class="vd-ev-body"><button class="vd-ev-btn" type="button" aria-expanded="${open}" aria-controls="x-${esc(e.id)}"><span class="vd-ev-t">${esc(d.t)}</span>
-        <span class="vd-ev-when num"><b>${esc(dDate(e.tsAdj))}</b> · ${esc(dTime(e.tsAdj))}</span><span class="vd-ev-pos num">${esc(clock(e.pos))}</span>${relHtml ? `<span class="vd-ev-rel">${relHtml}</span>` : ""}<span class="vd-ev-chev" aria-hidden="true">${ic("chevron-right")}</span></button>
+        <span class="vd-ev-when num">${esc(dBoth(e.tsAdj))}</span><span class="vd-ev-pos num">${esc(clock(e.pos))}</span>${relHtml ? `<span class="vd-ev-rel">${relHtml}</span>` : ""}<span class="vd-ev-chev" aria-hidden="true">${ic("chevron-right")}</span></button>
         <p class="vd-ev-d">${esc(d.d)}</p>${open ? evDetail(e) : ""}</div></li>`;
   }
   function evDetail(e) {
     const m = e.meta || {}, skew = e.tsAdj - e.ts, kv = [
-      ["Event ID", `<span class="num break">${esc(e.id)}</span>`], ["Type", esc(e.type)], ["Date and time", `<span class="num">${esc(dDate(e.tsAdj))}, ${esc(dTime(e.tsAdj, true))}</span> (${esc(st.tz)})`],
+      ["Event ID", `<span class="num break">${esc(e.id)}</span>`], ["Type", esc(e.type)], ["Date and time", `<span class="num">${esc(dBoth(e.tsAdj, true))}</span>`],
       ["UTC (stored)", `<span class="num">${esc(new Date(e.tsAdj).toISOString())}</span>`], ["As the device saw it", `<span class="num">${esc(new Date(e.ts).toISOString())}</span>${Math.abs(skew) > 60000 ? ` · device clock ${dur(Math.abs(skew))} ${skew > 0 ? "behind" : "ahead"}` : ""}`],
       ["Playback position", `<span class="num">${esc(clock(e.pos))} (${e.pos}s)</span>`], ["Playback speed", `<span class="num">${e.rate}×</span>`], ["State change", `${esc(e.prev)} → ${esc(e.next)}`],
       ["Device", esc(e.deviceLabel || "Device")], ["Viewing", `<span class="num break">${esc(e.sessionId)}</span> · event ${e.seq}`], ["Reason", esc(m.reason ? REASON[m.reason] || m.reason : "—")],
@@ -301,7 +298,7 @@
     $("vdTlMore").hidden = ordered.length <= vis.length; $("vdTlMore").textContent = `Show ${Math.min(TL_STEP, ordered.length - vis.length)} more (${ordered.length - vis.length} hidden)`;
     $("vdSort").textContent = st.sortDesc ? "Newest first" : "Oldest first";
     const dev = st.detail.devices.filter(d => st.F.device === "all" || d.id === st.F.device);
-    $("vdTlNote").innerHTML = `Every event listed here is <b>confirmed</b>: the server has stored it. Events a device records while it is offline are held on that device and appear here, in order, when it reconnects${dev.length ? " (" + dev.map(d => esc(d.label) + (d.lastEventsAt ? " last delivered " + esc(dTime(d.lastEventsAt)) : " has not delivered events yet")).join("; ") + ")" : ""}.${total > list.length ? ` Showing the latest ${list.length} of ${total}; narrow the filters or export for the rest.` : ""} Last sync <span class="num" id="vdLast">${esc(st.lastSync ? dTime(st.lastSync) : "—")}</span>.`;
+    $("vdTlNote").innerHTML = `Every event listed here is <b>confirmed</b>: the server has stored it. Events a device records while it is offline are held on that device and appear here, in order, when it reconnects${dev.length ? " (" + dev.map(d => esc(d.label) + (d.lastEventsAt ? " last delivered " + esc(dBoth(d.lastEventsAt)) : " has not delivered events yet")).join("; ") + ")" : ""}.${total > list.length ? ` Showing the latest ${list.length} of ${total}; narrow the filters or export for the rest.` : ""} Last sync <span class="num" id="vdLast">${esc(st.lastSync ? dBoth(st.lastSync) : "—")}</span>.`;
   }
 
   /* ---- pause table ---- */
@@ -312,8 +309,8 @@
     $("vdPause").innerHTML = `<div class="vd-minis">${stat("Total pauses", S.count)}${stat("Total paused", esc(dur(S.totalMs)))}${stat("Average", esc(dur(S.avgMs)))}${stat("Longest", esc(dur(S.longestMs)))}${stat("Shortest", S.completed ? esc(dur(S.shortestMs)) : "—")}</div>
       ${ps.length ? `<div class="vd-scroll"><table class="vd-table vd-rt"><thead><tr><th>Pause</th><th>Paused at</th><th>Resumed at</th><th class="r">Duration</th><th class="r">Position</th></tr></thead><tbody>${ps.slice().reverse().map(p => `<tr>
         <td data-label="Pause"><b class="num">#${p.number}</b> <small>${esc(p.deviceLabel)}</small> ${status(p)}</td>
-        <td data-label="Paused at" class="num"><span class="d">${esc(dDate(p.pausedAt))}</span> ${esc(dTime(p.pausedAt))}</td>
-        <td data-label="Resumed at" class="num">${p.resumedAt != null ? `<span class="d">${esc(dDate(p.resumedAt))}</span> ${esc(dTime(p.resumedAt))}` : p.status === "unresolved" ? "unknown" : p.status === "open" ? "not yet" : "—"}</td>
+        <td data-label="Paused at" class="num">${esc(dBoth(p.pausedAt))}</td>
+        <td data-label="Resumed at" class="num">${p.resumedAt != null ? esc(dBoth(p.resumedAt)) : p.status === "unresolved" ? "unknown" : p.status === "open" ? "not yet" : "—"}</td>
         <td data-label="Duration" class="num r">${p.durationMs != null ? esc(dur(p.durationMs)) : p.status === "unresolved" ? `at least ${esc(dur(p.minDurationMs))}` : `<span data-open-pause="${esc(p.pausedEventId || "")}">${P.formatClock(isOnline(p.deviceId) ? serverNow() - p.pausedAt : 0)}</span>`}</td>
         <td data-label="Position" class="num r">${esc(clock(p.pausedPos))}</td></tr>`).join("")}</tbody></table></div>` : `<div class="vd-empty">${ic("pause")}<p>No pauses recorded${filterCount() ? " for these filters" : ""}.</p></div>`}
       <p class="vd-hint">A pause is closed by the next resume. If a viewing ends while paused, the pause closes at that recorded end time; if the browser vanished, the pause is shown as <b>unresolved</b> with the time it is known to have lasted at least. Nothing is guessed.</p>`;
@@ -325,10 +322,10 @@
     $("vdSess").innerHTML = items.length ? items.map(s => {
       const open = st.sessOpen.has(s.sessionId), m = s.hasEvents ? projected(s) : null;
       const stateTag = !s.hasEvents ? `<span class="vd-tag">Summary only</span>` : s.metrics.status === "open" ? (isOnline(s.deviceId) ? `<span class="vd-tag live">In progress</span>` : `<span class="vd-tag warn">Device offline</span>`) : s.metrics.status === "interrupted" ? `<span class="vd-tag warn">Interrupted</span>` : `<span class="vd-tag">Ended</span>`;
-      const end = s.hasEvents ? (s.metrics.endedAt != null ? dBoth(s.metrics.endedAt) : s.metrics.interruptedAt != null ? "unknown (last activity " + dTime(s.metrics.interruptedAt) + ")" : "in progress") : s.endedAt ? dBoth(s.endedAt) : "unknown";
+      const end = s.hasEvents ? (s.metrics.endedAt != null ? dBoth(s.metrics.endedAt) : s.metrics.interruptedAt != null ? "unknown (last activity " + dBoth(s.metrics.interruptedAt) + ")" : "in progress") : s.endedAt ? dBoth(s.endedAt) : "unknown";
       const grid = s.hasEvents ? [["Active", dur(m.activeMs)], ["Paused", dur(m.pausedMs) + (m.unresolvedPausedMs ? " + ≥" + dur(m.unresolvedPausedMs) : "")], ["Buffering", dur(m.bufferingMs)], ["Elapsed", dur(m.elapsedMs)], ["Pauses", m.pauseCount + " / " + m.resumeCount + " resumed"], ["Seeks", m.seekCount], ["Completion", m.completed ? "Completed " + dTime(m.completedAt) : "No"]]
         : [["Watched", dur(s.summary.watchedMs)], ["Pauses (count only)", s.summary.pauses], ["Seeks (count only)", s.summary.seeks], ["Completion", s.completed ? "Completed" : "No"]];
-      return `<article class="vd-sess${open ? " open" : ""}" data-sid="${esc(s.sessionId)}"><button class="vd-sess-h" type="button" aria-expanded="${open}"><span class="vd-sess-t"><b>${esc(dDate(s.startedAt))}</b> <span class="num">${esc(dTime(s.startedAt))}</span> → <span class="num">${esc(end)}</span></span>
+      return `<article class="vd-sess${open ? " open" : ""}" data-sid="${esc(s.sessionId)}"><button class="vd-sess-h" type="button" aria-expanded="${open}"><span class="vd-sess-t"><b class="num">${esc(dBoth(s.startedAt))}</b> → <span class="num">${esc(end)}</span></span>
         <span class="vd-sess-m">${WL.chip(s.deviceId, s.deviceLabel)} ${stateTag}${s.completed ? `<span class="vd-tag ok">Completed</span>` : ""}</span><span class="vd-ev-chev" aria-hidden="true">${ic("chevron-right")}</span></button>
         <dl class="vd-sess-g">${grid.map(g => `<div><dt>${esc(g[0])}</dt><dd class="num">${esc(String(g[1]))}</dd></div>`).join("")}</dl>
         ${open ? `<div class="vd-sess-tl" id="sx-${esc(s.sessionId)}">${s.hasEvents ? '<p class="vd-hint">Loading…</p>' : `<p class="vd-hint">This viewing was recorded before event tracking existed (or with detail collection off), so it has only a summary. No timeline is available and none is invented.</p>`}</div>` : ""}</article>`;
@@ -353,9 +350,9 @@
     const pick = st.progressSid && sess.find(s => s.sessionId === st.progressSid) || sess[sess.length - 1];
     const card = (title, sub, body, extra) => `<article class="vd-chart-card"><h3>${esc(title)}</h3><p class="vd-hint">${esc(sub)}</p>${extra || ""}${body}</article>`;
     $("vdCharts").innerHTML = [
-      card("Watch activity", "Playing time per " + (a.runs.length && a.runs[a.runs.length - 1].ts - a.runs[0].ts > 172800000 ? "day" : "hour") + ", from recorded playback runs", CH.activity(a.runs, st.tz)),
+      card("Watch activity", "Playing time per " + (a.runs.length && a.runs[a.runs.length - 1].ts - a.runs[0].ts > 172800000 ? "day" : "hour") + ", from recorded playback runs, in Sri Lanka time (SLST)", CH.activity(a.runs, st.tz)),
       card("Playback progress", "Position in the video against time since the viewing began. Shaded = paused.", pick ? CH.progress(pick, a.runs.map(r => r), st.pauses.filter(p => p.sessionId === pick.sessionId), a.duration || st.detail.video.duration) + CH.coverage(pick.segments || [], a.duration || st.detail.video.duration) : CH.progress({ sessionId: "", startedAt: 0 }, [], [], 0),
-        sess.length > 1 ? `<label class="vd-field vd-field-inline"><span>Viewing</span><select class="vd-input" id="vdProgSel">${sess.map(s => `<option value="${esc(s.sessionId)}"${pick && s.sessionId === pick.sessionId ? " selected" : ""}>${esc(dDate(s.startedAt))} ${esc(dTime(s.startedAt))}</option>`).join("")}</select></label>` : ""),
+        sess.length > 1 ? `<label class="vd-field vd-field-inline"><span>Viewing</span><select class="vd-input" id="vdProgSel">${sess.map(s => `<option value="${esc(s.sessionId)}"${pick && s.sessionId === pick.sessionId ? " selected" : ""}>${esc(dBoth(s.startedAt))}</option>`).join("")}</select></label>` : ""),
       card("Pause and resume distribution", "How long the pauses lasted", CH.pauseDistribution(a.pauseDistribution)),
       card("Watch-time breakdown", "Where the time went across all viewings", CH.breakdown(a.breakdown) + `<h4 class="vd-sub-h">Content actually played, all viewings</h4>` + CH.coverage(a.coverage, a.duration || st.detail.video.duration)),
       card("Session comparison", "Playing and paused time per viewing (most recent 12)", CH.sessionsComparison(a.sessions, st.tz))
@@ -365,7 +362,7 @@
 
   function renderAll() {
     renderHeader(); updateStats(); renderTimeline(); renderPauses(); renderSessions(); renderCharts();
-    const f = $("fSess"); if (f) { const cur = st.F.session; f.innerHTML = `<option value="">All viewings</option>` + st.sessions.map(s => `<option value="${esc(s.sessionId)}"${s.sessionId === cur ? " selected" : ""}>${esc(dDate(s.startedAt))} ${esc(dTime(s.startedAt))} · ${esc(s.deviceLabel)}</option>`).join(""); }
+    const f = $("fSess"); if (f) { const cur = st.F.session; f.innerHTML = `<option value="">All viewings</option>` + st.sessions.map(s => `<option value="${esc(s.sessionId)}"${s.sessionId === cur ? " selected" : ""}>${esc(dBoth(s.startedAt))} · ${esc(s.deviceLabel)}</option>`).join(""); }
     const c = filterCount(); $("vdFCount").hidden = !c; $("vdFCount").textContent = c;
   }
 
@@ -454,7 +451,6 @@
   /* ================= wiring ================= */
   function bind() {
     const s = st;
-    $("vdTz").onchange = () => { s.tz = $("vdTz").value; try { localStorage.setItem(TZ_KEY, s.tz); } catch (_e) { /* ignore */ } renderAll(); };
     $("vdDev").onchange = () => { s.F.device = $("vdDev").value; reload(); };
     $("vdSort").onclick = () => { s.sortDesc = !s.sortDesc; renderTimeline(); };
     $("vdTlMore").onclick = () => { s.tlLimit += TL_STEP; renderTimeline(); };
@@ -505,7 +501,7 @@
   async function render(app, videoId) {
     dispose();
     await WL.loadDevices();
-    const s = st = { videoId, tz: savedTz(), F: { device: "all", session: "", fromDate: "", toDate: "", timeFrom: "", timeTo: "", types: new Set(), completed: "" }, offset: 0, conn: "syncing", lastSync: null,
+    const s = st = { videoId, tz: P.DISPLAY_TZ, F: { device: "all", session: "", fromDate: "", toDate: "", timeFrom: "", timeTo: "", types: new Set(), completed: "" }, offset: 0, conn: "syncing", lastSync: null,
       open: new Set(), sessOpen: new Set(), fresh: new Set(), sessEvents: new Map(), local: new Map(), sortDesc: true, tlLimit: TL_STEP, attempt: 0, progressSid: null, events: [], eventTotal: 0, ids: new Set(), sessions: [], pauses: [] };
     // identity first (404 for an unknown video), so the page frame can show the title straight away
     let first;

@@ -84,7 +84,7 @@ test("export returns JSON and CSV for the current filters, and neutralises sprea
   assert.match(csv.headers["content-type"], /text\/csv/);
   assert.match(csv.headers["content-disposition"], /\.csv"/);
   const lines = csv.body.trim().split("\r\n");
-  assert.equal(lines[0], "device,sessionId,videoId,url,title,channel,startedAt,endedAt,watchedSeconds,durationSeconds,progressPercent,completed,seeks,rewinds,pauses");
+  assert.equal(lines[0], "device,sessionId,videoId,url,title,channel,startedAt,endedAt,watchedSeconds,durationSeconds,progressPercent,completed,seeks,rewinds,pauses,startedAtSlst,endedAtSlst");   // the UTC columns are unchanged; the last two repeat them in Sri Lanka time
   assert.equal(lines.length, 4, "header + the 3 Laptop-1 rows");
   const evil = lines.find(l => l.includes("evil,vidX"));
   assert.ok(evil.includes(`"'=HYPERLINK(""http://evil"",""x""), ""quoted"""`), "title formula neutralised and quotes escaped: " + evil);

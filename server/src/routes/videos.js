@@ -32,7 +32,7 @@ export default async function (app, { db }) {
       from: num(q.from), to: num(q.to), types,
       completed: q.completed === "yes" ? 1 : q.completed === "no" ? 0 : null,
       state: ["open", "ended", "interrupted"].includes(q.state) ? q.state : null,
-      tz: pb.validZone(String(q.tz || "")) ? String(q.tz) : "UTC",
+      tz: pb.DISPLAY_TZ, // always Sri Lanka time: a zone named by the caller is ignored, so every page and file agrees
       limit: Math.min(Math.max(Math.floor(num(q.limit)) || 200, 1), MAX_EVENTS_PAGE), offset: Math.max(Math.floor(num(q.offset)) || 0, 0),
       order: q.order === "desc" ? "DESC" : "ASC"
     };
@@ -271,19 +271,19 @@ export default async function (app, { db }) {
   app.get("/api/video/:videoId/export", (req, reply) => {
     const sc = scope(req, reply); if (!sc) return;
     const fmt = ["csv", "json", "print"].includes(req.query?.format) ? req.query.format : "json", scopeName = ["events", "pauses", "sessions"].includes(req.query?.scope) ? req.query.scope : "events";
-    const tz = sc.f.tz, stamp = new Date().toISOString().slice(0, 10);
+    const tz = sc.f.tz, stamp = pb.dayKey(Date.now(), tz);
     const ev = queryEvents(sc, { limit: MAX_EXPORT_EVENTS, offset: 0, order: "ASC" });
     const pauses = queryPauses(sc), { events: es, summaryOnly } = allSessions(sc);
     const vid = db.prepare(`SELECT enc FROM videos WHERE video_id=? AND device_id IN (${sc.ph}) ORDER BY last_watched DESC LIMIT 1`).get(sc.videoId, ...sc.ids);
     const meta = vid ? decryptJSON(vid.enc) : {};
     const info = { videoId: sc.videoId, title: meta.title || "", channel: meta.channel || "", channelUrl: meta.channelUrl || "", url: meta.url || "https://www.youtube.com/watch?v=" + sc.videoId, duration: meta.duration || 0 };
     audit(db, req.admin.id, sc.f.device, "export_video", req.ip, { videoId: sc.videoId, format: fmt, scope: scopeName, events: ev.items.length });
-    const t = ms => (ms == null ? "" : pb.formatTime(ms, tz, true)), d = ms => (ms == null ? "" : pb.formatDate(ms, tz));
+    const t = ms => (ms == null ? "" : pb.formatTime(ms, tz, true)), d = ms => (ms == null ? "" : pb.formatDate(ms, tz)), S = ms => (ms == null ? "" : pb.formatStamp(ms, tz, true));
     const iso = ms => (ms == null ? "" : new Date(ms).toISOString());
 
     if (fmt === "json") {
       return reply.header("Content-Disposition", `attachment; filename="video-${sc.videoId}-${stamp}.json"`).send({
-        exportedAt: new Date().toISOString(), timezone: tz, note: "Timestamps are UTC milliseconds on the server's clock; durations come from the device's own clock.",
+        exportedAt: new Date().toISOString(), timezone: tz, timezoneLabel: "SLST (UTC+05:30)", note: "Timestamps are UTC milliseconds on the server's clock; show them in Asia/Colombo (SLST, UTC+05:30). Durations come from the device's own clock and never depend on the display zone.",
         video: info, filters: { device: sc.f.device, session: sc.f.session, from: sc.f.from, to: sc.f.to, types: sc.f.types, completed: sc.f.completed },
         sessions: [...es.map(({ segments, runs, ...s }) => s), ...summaryOnly], pauses, events: ev.items, truncated: ev.total > ev.items.length
       });
@@ -292,7 +292,7 @@ export default async function (app, { db }) {
       let head, lines;
       if (scopeName === "pauses") {
         head = ["pause_number", "device", "session_id", "paused_at_utc", "paused_at_local", "resumed_at_utc", "resumed_at_local", "timezone", "status", "duration_seconds", "at_least_seconds", "paused_position_seconds", "resumed_position_seconds"];
-        lines = pauses.map(p => [p.number, p.deviceLabel, p.sessionId, iso(p.pausedAt), d(p.pausedAt) + " " + t(p.pausedAt), iso(p.resumedAt), p.resumedAt ? d(p.resumedAt) + " " + t(p.resumedAt) : "", tz, p.status,
+        lines = pauses.map(p => [p.number, p.deviceLabel, p.sessionId, iso(p.pausedAt), S(p.pausedAt), iso(p.resumedAt), p.resumedAt ? S(p.resumedAt) : "", tz, p.status,
           p.durationMs != null ? Math.round(p.durationMs / 1000) : "", p.status === "unresolved" ? Math.round(p.minDurationMs / 1000) : "", p.pausedPos ?? "", p.resumedPos ?? ""]);
       } else if (scopeName === "sessions") {
         head = ["device", "session_id", "started_utc", "ended_utc", "state", "has_event_history", "active_seconds", "paused_seconds", "buffering_seconds", "elapsed_seconds", "pauses", "resumes", "seeks", "completed", "unique_content_seconds"];
@@ -300,8 +300,8 @@ export default async function (app, { db }) {
           Math.round(s.metrics.pausedMs / 1000), Math.round(s.metrics.bufferingMs / 1000), Math.round(s.metrics.elapsedMs / 1000), s.metrics.pauseCount, s.metrics.resumeCount, s.metrics.seekCount, s.completed, s.metrics.uniqueContentSec]
           : [s.deviceLabel, s.sessionId, iso(s.startedAt), iso(s.endedAt), s.state, "no (summary only)", Math.round(s.summary.watchedMs / 1000), "", "", "", s.summary.pauses, "", s.summary.seeks, s.completed, ""]);
       } else {
-        head = ["event_number", "timestamp_utc", "date_local", "time_local", "timezone", "event_type", "device", "session_id", "video_id", "video_title", "position_seconds", "playback_speed", "previous_state", "new_state", "related_duration_seconds", "related_note", "reason"];
-        lines = ev.items.map((e, i) => [i + 1, iso(e.tsAdj), d(e.tsAdj), t(e.tsAdj), tz, e.type, e.deviceLabel, e.sessionId, sc.videoId, info.title, e.pos, e.rate, e.prev, e.next,
+        head = ["event_number", "timestamp_utc", "timestamp_slst", "date_local", "time_local", "timezone", "event_type", "device", "session_id", "video_id", "video_title", "position_seconds", "playback_speed", "previous_state", "new_state", "related_duration_seconds", "related_note", "reason"];
+        lines = ev.items.map((e, i) => [i + 1, iso(e.tsAdj), S(e.tsAdj), d(e.tsAdj), t(e.tsAdj), tz, e.type, e.deviceLabel, e.sessionId, sc.videoId, info.title, e.pos, e.rate, e.prev, e.next,
           e.related && e.related.ms != null ? Math.round(e.related.ms / 1000) : "", relatedText(e.related), e.meta.reason || ""]);
       }
       return reply.header("Content-Type", "text/csv; charset=utf-8").header("Content-Disposition", `attachment; filename="video-${sc.videoId}-${scopeName}-${stamp}.csv"`)
@@ -315,17 +315,17 @@ export default async function (app, { db }) {
 <link rel="stylesheet" href="/print.css"></head><body>
 <header><button id="printBtn" type="button" class="noprint">Save as PDF / Print</button><h1>${esc(info.title || sc.videoId)}</h1>
 <p>${esc(info.channel)} · ${esc(info.url)} · ${esc(sc.videoId)}${info.duration ? " · " + esc(pb.formatDuration(info.duration * 1000)) : ""}</p>
-<p class="muted">Generated ${esc(d(Date.now()))} ${esc(t(Date.now()))} (${esc(tz)}). Times are shown in ${esc(tz)}; they are stored in UTC.</p></header>
+<p class="muted">Generated ${esc(S(Date.now()))}. All times are Sri Lanka Standard Time (Asia/Colombo, UTC+05:30); they are stored in UTC.</p></header>
 <h2>Summary</h2><table class="kv">${[["Watch sessions", es.length + summaryOnly.length], ["Active watch time", pb.formatDuration(sumRoll.activeMs)], ["Total paused time", pb.formatDuration(sumRoll.pausedMs)],
       ["Pauses / resumes", sumRoll.pauseCount + " / " + sumRoll.resumeCount], ["Buffering time", pb.formatDuration(sumRoll.bufferingMs)], ["Unique content watched", sumRoll.uniqueContentSec + " s" + (sumRoll.uniqueContentPct != null ? " (" + sumRoll.uniqueContentPct + "%)" : "")],
       ["Furthest position", sumRoll.furthestSec + " s" + (sumRoll.progressPct != null ? " (" + sumRoll.progressPct + "%)" : "")], ["Sessions without event history", summaryOnly.length]].map(r => row(r)).join("")}</table>
 <h2>Pauses (${ps.count})</h2><p class="muted">Average ${esc(pb.formatDuration(ps.avgMs))} · longest ${esc(pb.formatDuration(ps.longestMs))} · shortest ${esc(pb.formatDuration(ps.shortestMs))} · unresolved ${ps.unresolved}</p>
-<table><thead><tr><th>#</th><th>Paused at</th><th>Resumed at</th><th>Duration</th><th>Position</th></tr></thead><tbody>${pauses.map(p => row([p.number, d(p.pausedAt) + " " + t(p.pausedAt),
-      p.resumedAt ? d(p.resumedAt) + " " + t(p.resumedAt) : p.status === "unresolved" ? "unresolved" : "still paused", p.durationMs != null ? pb.formatDuration(p.durationMs) : p.status === "unresolved" ? "at least " + pb.formatDuration(p.minDurationMs) : "—", p.pausedPos + " s"])).join("")}</tbody></table>
-<h2>Sessions</h2><table><thead><tr><th>Started</th><th>Ended</th><th>Device</th><th>Active</th><th>Paused</th><th>Elapsed</th><th>Completed</th></tr></thead><tbody>${[...es, ...summaryOnly].sort((a, b) => a.startedAt - b.startedAt).map(s => row([d(s.startedAt) + " " + t(s.startedAt),
-      s.endedAt ? d(s.endedAt) + " " + t(s.endedAt) : s.state, s.deviceLabel, pb.formatDuration(s.hasEvents ? s.metrics.activeMs : s.summary.watchedMs), s.hasEvents ? pb.formatDuration(s.metrics.pausedMs) : "no event history",
+<table><thead><tr><th>#</th><th>Paused at (SLST)</th><th>Resumed at (SLST)</th><th>Duration</th><th>Position</th></tr></thead><tbody>${pauses.map(p => row([p.number, S(p.pausedAt),
+      p.resumedAt ? S(p.resumedAt) : p.status === "unresolved" ? "unresolved" : "still paused", p.durationMs != null ? pb.formatDuration(p.durationMs) : p.status === "unresolved" ? "at least " + pb.formatDuration(p.minDurationMs) : "—", p.pausedPos + " s"])).join("")}</tbody></table>
+<h2>Sessions</h2><table><thead><tr><th>Started (SLST)</th><th>Ended (SLST)</th><th>Device</th><th>Active</th><th>Paused</th><th>Elapsed</th><th>Completed</th></tr></thead><tbody>${[...es, ...summaryOnly].sort((a, b) => a.startedAt - b.startedAt).map(s => row([S(s.startedAt),
+      s.endedAt ? S(s.endedAt) : s.state, s.deviceLabel, pb.formatDuration(s.hasEvents ? s.metrics.activeMs : s.summary.watchedMs), s.hasEvents ? pb.formatDuration(s.metrics.pausedMs) : "no event history",
       s.hasEvents ? pb.formatDuration(s.metrics.elapsedMs) : "", s.completed ? "yes" : "no"])).join("")}</tbody></table>
-<h2>Events (${ev.items.length}${ev.total > ev.items.length ? " of " + ev.total : ""})</h2><table><thead><tr><th>#</th><th>Date</th><th>Time</th><th>Event</th><th>Position</th><th>Related</th></tr></thead><tbody>${ev.items.map((e, i) => row([i + 1, d(e.tsAdj), t(e.tsAdj), e.type.replace("VIDEO_", ""),
+<h2>Events (${ev.items.length}${ev.total > ev.items.length ? " of " + ev.total : ""})</h2><table><thead><tr><th>#</th><th>When (SLST)</th><th>Event</th><th>Position</th><th>Related</th></tr></thead><tbody>${ev.items.map((e, i) => row([i + 1, S(e.tsAdj), e.type.replace("VIDEO_", ""),
       e.pos + " s", relatedText(e.related)])).join("")}</tbody></table><script src="/print.js"></script></body></html>`;
     return reply.header("Content-Type", "text/html; charset=utf-8").send(html);
   });

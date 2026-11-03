@@ -362,7 +362,7 @@ test("timezone conversion: UTC instants are displayed in the chosen zone, with o
   assert.match(P.formatTime(ts, "Asia/Colombo"), /^8:35:00\sPM$/);          // UTC+5:30
   assert.match(P.formatTime(ts, "America/New_York"), /^10:05:00\sAM$/);     // EST in November
   assert.equal(P.formatDate(Date.UTC(2026, 10, 3, 23, 30, 0), "Asia/Colombo"), "November 4, 2026");   // crosses midnight
-  assert.match(P.formatTime(ts, "Not/AZone"), /^\d{1,2}:\d{2}:00\s[AP]M$/);   // an invalid zone falls back to the local zone, never throws
+  assert.equal(P.formatTime(ts, "Not/AZone"), "8:35:00 PM");   // an invalid zone falls back to Sri Lanka time, never throws
 });
 
 test("duration formatting", () => {
@@ -385,5 +385,5 @@ test("local date and time in a chosen zone convert to the right UTC instant, acr
   // round trip: what the display functions show for that instant is what was asked for
   const ts = P.zonedToUtc(2026, 3, 8, 12, 15, 0, 0, "America/New_York");
   assert.match(P.formatTime(ts, "America/New_York"), /^12:15:00\sPM$/);
-  assert.equal(P.zonedToUtc(2026, 1, 1, 0, 0, 0, 0, "Not/AZone"), Date.UTC(2026, 0, 1), "an invalid zone is treated as UTC");
+  assert.equal(P.zonedToUtc(2026, 1, 1, 0, 0, 0, 0, "Not/AZone"), P.zonedToUtc(2026, 1, 1, 0, 0, 0, 0, "Asia/Colombo"), "an invalid zone is treated as Sri Lanka time, never the machine's zone");
 });

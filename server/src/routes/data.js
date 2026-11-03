@@ -4,6 +4,7 @@ import { summarize } from "../lib/aggregate.js";
 import { audit } from "../lib/helpers.js";
 import { recomputeVideo, getGlobalRetention, setGlobalRetention, purgeAll } from "../lib/retention.js";
 import { createBackup, listBackups } from "../lib/backup.js";
+import pb from "../lib/playback.cjs";
 import { deleteVideoEvents } from "../lib/videoEvents.js";
 
 const MAX_ROWS = 200000;
@@ -57,11 +58,12 @@ export default async function (app, { db, config }) {
 
   app.get("/api/stats", req => {
     const { items, truncated } = loadItems(req.admin.id, filterOf(req.query));
-    return { ...summarize(items, { now: Date.now(), tzOffsetMin: Number(req.query?.tz) || 0 }), truncated };
+    return { ...summarize(items, { now: Date.now() }), timeZone: pb.DISPLAY_TZ, truncated }; // days are Sri Lanka days whatever the browser's zone
   });
 
   /* ---- export: JSON or CSV of everything matching the filters ---- */
-  const CSV_COLS = ["device", "sessionId", "videoId", "url", "title", "channel", "startedAt", "endedAt", "watchedSeconds", "durationSeconds", "progressPercent", "completed", "seeks", "rewinds", "pauses"];
+  // startedAt / endedAt stay UTC (ISO 8601, unchanged for anything that reads them); the two *Slst columns repeat them in Sri Lanka time.
+const CSV_COLS = ["device", "sessionId", "videoId", "url", "title", "channel", "startedAt", "endedAt", "watchedSeconds", "durationSeconds", "progressPercent", "completed", "seeks", "rewinds", "pauses", "startedAtSlst", "endedAtSlst"];
   // Titles and channel names come from the web, so spreadsheet formula injection is guarded: a leading = + - @ is neutralised.
   const cell = v => {
     let s = v === null || v === undefined ? "" : String(v);
@@ -71,15 +73,15 @@ export default async function (app, { db, config }) {
   app.get("/api/export", (req, reply) => {
     const f = filterOf(req.query);
     const { items } = loadItems(req.admin.id, f);
-    const stamp = new Date().toISOString().slice(0, 10);
+    const stamp = pb.dayKey(Date.now()); // the file name carries the Sri Lanka date
     audit(db, req.admin.id, f.device, "export", req.ip, { format: req.query?.format === "csv" ? "csv" : "json", rows: items.length });
     if (req.query?.format === "csv") {
       const lines = [CSV_COLS.join(",")].concat(items.map(it => [it.deviceLabel, it.sessionId, it.videoId, it.url, it.title, it.channel,
         new Date(it.startTs).toISOString(), it.endTs ? new Date(it.endTs).toISOString() : "", Math.round(it.watchedMs / 1000), it.duration,
-        it.progress ?? "", it.completed, it.seeks, it.rewinds, it.pauses].map(cell).join(",")));
+        it.progress ?? "", it.completed, it.seeks, it.rewinds, it.pauses, pb.formatStamp(it.startTs), it.endTs ? pb.formatStamp(it.endTs) : ""].map(cell).join(",")));
       return reply.header("Content-Type", "text/csv; charset=utf-8").header("Content-Disposition", `attachment; filename="watch-history-${stamp}.csv"`).send(lines.join("\r\n") + "\r\n");
     }
-    return reply.header("Content-Disposition", `attachment; filename="watch-history-${stamp}.json"`).send({ exportedAt: new Date().toISOString(), count: items.length, items: items.map(({ updatedAt, ...rest }) => rest) });
+    return reply.header("Content-Disposition", `attachment; filename="watch-history-${stamp}.json"`).send({ exportedAt: new Date().toISOString(), exportedAtSlst: pb.formatStamp(Date.now()), displayTimeZone: pb.DISPLAY_TZ, note: "Timestamps are UTC milliseconds; display them in Asia/Colombo (SLST, UTC+05:30).", count: items.length, items: items.map(({ updatedAt, ...rest }) => rest) });
   });
 
   /* ---- deletion of the SERVER copy (devices keep their own local data) ---- */

@@ -37,19 +37,23 @@ All metrics are one pure function of the events (`lib/playback.js` `fold`, share
 
 Reaching 100% does **not** prove everything was watched: the page shows *unique content* and a coverage strip next to *progress*. A position span larger than wall time × speed allows is capped and flagged `implausible_span`.
 
-## Time zones
+## Time zone: Sri Lanka Standard Time everywhere
 
-Stored in UTC. The page shows them in the zone chosen in the header (default: the browser's; remembered). Exact date and time to the second in lists, milliseconds in an event's expanded view. Date and time-of-day filters are read in the selected zone (daylight saving handled). A device whose clock is wrong is corrected with the offset measured at upload (the same mechanism as sessions); durations always come from the device's own single clock. Sub-second accuracy is **not** claimed: delivery latency, browser throttling of background tabs and suspension all limit it, and the page says "confirmed" only for what the server has stored.
+Every timestamp is **stored as UTC milliseconds and displayed in Sri Lanka Standard Time (`Asia/Colombo`, UTC+05:30)**, in the form `November 3, 2026 · 12:45:02 PM (SLST)`. The zone is fixed in one place (`lib/util.js` for the extension pages and dashboard, `lib/playback.js` for the event model and the server); nothing reads the browser's or the machine's zone, nothing adds hours by hand (Intl does the conversion, so dates roll over exactly at 00:00 in Colombo, 18:30 UTC), and `tests/timezone.test.js` fails if source code ever calls `toLocaleString`, `getTimezoneOffset` or similar again.
+
+This covers the dashboard, Videos, History, Devices, sessions, pause/resume tables, the activity timeline, analytics (day/week/month buckets and chart labels), the Audit log, backups list, the extension popup, Settings, Device information and its log, the date filters (a picked date means 00:00:00 to 23:59:59.999 SLST), and every export: CSV (UTC column plus SLST columns), JSON (UTC milliseconds plus the zone name) and the print report. A zone named in a request (`tz=`) is ignored, so every page and file agrees.
+
+Durations never depend on display: they are computed from the absolute UTC instants (a pause from 11:59:30 PM to 12:02:00 AM next day is exactly 150 s). A device whose clock is wrong is still corrected with the offset measured at upload. Sub-second accuracy is **not** claimed: delivery latency, browser throttling of background tabs and suspension all limit it, and the page says "confirmed" only for what the server has stored.
 
 ## The page
 
-A header (thumbnail, title, channel, URL, duration, status, completion badge, connection indicator); a full information grid; live statistic cards; filters (date, time, device, viewing, event type, completion status); the activity timeline (newest first, expandable events, up to 300 shown at a time of the latest 2000); pause/resume table with count, total, average, longest and shortest; viewing history with expandable per-viewing timelines; five charts from recorded data (watch activity, playback progress, pause distribution, time breakdown, session comparison).
+A header (thumbnail, title, channel, URL, duration, status, completion badge, connection indicator, fixed SLST time-zone chip); a full information grid; live statistic cards; filters (date, time, device, viewing, event type, completion status); the activity timeline (newest first, expandable events, up to 300 shown at a time of the latest 2000); pause/resume table with count, total, average, longest and shortest; viewing history with expandable per-viewing timelines; five charts from recorded data (watch activity, playback progress, pause distribution, time breakdown, session comparison).
 
 **Live status:** `LIVE WATCHING`, `PAUSED — hh:mm:ss`, `BUFFERING`, `AD PLAYING`, `COMPLETED`, `DEVICE OFFLINE` (the device has no real-time connection; timers freeze, nothing is extrapolated). **Connection indicator:** `LIVE` (event stream open), `SYNCING` (loading or catching up), `RECONNECTING`, `OFFLINE` (this browser is offline), with the last successful sync time. The page adds each server-confirmed event to the timeline as soon as the server stores it, re-folds the viewing, and ticks timers locally twice a second; it reconnects automatically (back-off up to 15 s) and re-reads everything after a drop. Events a device records while offline appear when it reconnects.
 
 ## Export
 
-*Export* offers events CSV, pauses CSV, viewings CSV, a complete JSON, and a print-ready report (**Save as PDF** from the browser's print dialog; no PDF library is bundled). The active filters and time zone apply. CSV cells that start with `= + - @` are neutralised. Every export is recorded in the audit log.
+*Export* offers events CSV, pauses CSV, viewings CSV, a complete JSON, and a print-ready report (**Save as PDF** from the browser's print dialog; no PDF library is bundled). The active filters apply; times are SLST. CSV cells that start with `= + - @` are neutralised. Every export is recorded in the audit log.
 
 ## API (owner session cookie; every query is scoped to the owner's own devices)
 

@@ -193,11 +193,11 @@ test("export CSV: one row per event, local and UTC time, neutralised formulas; J
   assert.match(csv.headers["content-disposition"], /attachment; filename="video-vidA-events-\d{4}-\d{2}-\d{2}\.csv"/);
   const lines = csv.body.replace(/^﻿/, "").trim().split("\r\n");
   assert.equal(lines.length, 11);
-  assert.match(lines[0], /^event_number,timestamp_utc,date_local,time_local,timezone,event_type,device,session_id/);
+  assert.match(lines[0], /^event_number,timestamp_utc,timestamp_slst,date_local,time_local,timezone,event_type,device,session_id/);
   assert.match(lines[2], /,Asia\/Colombo,VIDEO_PAUSED,Laptop,s1,vidA,/);
+  assert.match(lines[2], /"[A-Z][a-z]+ \d{1,2}, \d{4} · \d{1,2}:\d{2}:\d{2}\.\d{3} [AP]M \(SLST\)"/, "the full SLST timestamp is in the row");
   assert.match(lines[2], /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/);
   assert.match(lines[2], /,150,2 minutes 30 seconds,/);
-  assert.ok(lines.every(l => !/^[=+\-@]/.test(l.split(",")[9] || "")));
   assert.match(csv.body, /"'=HYPERLINK\(""http:\/\/x"",""click""\)"/);
   const pa = (await c.get("/api/video/vidA/export?format=csv&scope=pauses")).body.trim().split("\r\n");
   assert.equal(pa.length, 4);

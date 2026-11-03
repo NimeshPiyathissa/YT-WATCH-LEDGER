@@ -36,6 +36,7 @@ Run the check in [`INSTALL.md`](INSTALL.md#4-connect-the-browser-to-the-dashboar
 - **Rewatch time is approximate** (replayed content ÷ speed). Unique content is exact to the player's reported positions.
 - **Pause #N numbering is per viewing** in the timeline and global in the pause table.
 - **Behaviour changes:** a pause ends the viewing after 30 minutes (was 5); a finished video keeps its viewing open for 2 minutes so a replay is recognised; the content script ticks every 5 s instead of every second.
+- **Display time zone is fixed** to Sri Lanka time (`Asia/Colombo`): there is no per-user zone setting. CSV/JSON keep the UTC instant next to the SLST text so other tools can convert.
 - **PDF export** is a print-ready page you save as PDF from the browser (no PDF library).
 - **A device that is offline** holds its events and shows `DEVICE OFFLINE`; the page cannot see events that have not been delivered yet.
 - **The event stream per viewing is capped at 5000**; the page shows the latest 2000 events of a video and says when more exist (export has up to 20000).

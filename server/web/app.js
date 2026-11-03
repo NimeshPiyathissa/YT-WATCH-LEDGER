@@ -42,10 +42,10 @@
   const when = ts => ts ? U.fmtDateTime(ts) : "Never";
   const ago = ts => { if (!ts) return "Never"; const s = Math.max(0, Math.round((Date.now() - ts) / 1000)); return s < 60 ? "just now" : s < 3600 ? Math.round(s / 60) + " min ago" : s < 86400 ? Math.round(s / 3600) + " h ago" : Math.round(s / 86400) + " d ago"; };
   const dur = ms => U.fmtDuration(ms || 0);
-  const tz = () => new Date().getTimezoneOffset();
   const qs = o => { const p = new URLSearchParams(); for (const k of Object.keys(o)) if (o[k] !== "" && o[k] != null && o[k] !== "all") p.set(k, o[k]); const s = p.toString(); return s ? "?" + s : ""; };
-  const dayStart = v => v ? new Date(v + "T00:00:00").getTime() : "";
-  const dayEnd = v => v ? new Date(v + "T23:59:59.999").getTime() : "";
+  // A picked date means that day in Sri Lanka time (00:00:00.000 to 23:59:59.999 SLST), whatever zone the browser is set to.
+  const dayStart = v => U.dayStart(v);
+  const dayEnd = v => U.dayEnd(v);
   const colorIdx = id => Math.max(0, devices.findIndex(d => d.id === id)) % 6;
   const chip = (id, label) => `<span class="chip dc${colorIdx(id)}">${esc(label || "Device")}</span>`;
   const safeUrl = u => /^https:\/\/www\.youtube\.com\//.test(u || "") ? u : "";
@@ -206,8 +206,8 @@
   async function pageOverview() {
     await loadDevices();
     const from = ov.range === "0" ? "" : ov.range[0] === "h" ? Date.now() - Number(ov.range.slice(1)) * 3600000 : Date.now() - Number(ov.range) * 86400000;
-    const q = qs({ tz: tz(), device: ov.device, from });
-    const [s, ...per] = await Promise.all([api("GET", "/api/stats" + q)].concat(devices.map(d => api("GET", "/api/stats" + qs({ tz: tz(), device: d.id })))));
+    const q = qs({ device: ov.device, from });
+    const [s, ...per] = await Promise.all([api("GET", "/api/stats" + q)].concat(devices.map(d => api("GET", "/api/stats" + qs({ device: d.id })))));
     const series = devices.map((d, i) => ({ id: d.id, label: d.label || "Device", idx: colorIdx(d.id), daily: per[i].daily })).filter((x, i) => devices[i].status !== "pending");
     const max = Math.max(1, ...s.byDevice.map(d => d.totalMs));
     const approved = devices.filter(d => d.status === "active").length;

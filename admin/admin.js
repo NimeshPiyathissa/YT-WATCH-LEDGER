@@ -24,7 +24,7 @@
   }
   async function renderDiag() {
     const l = (await D.read()).slice(-80), box = $("diagLog"), pill = { info: "info", warn: "warn", error: "bad" };
-    box.innerHTML = l.map(e => '<div class="log-row ' + esc(e.level) + '"><time datetime="' + new Date(e.t).toISOString() + '">' + esc(new Date(e.t).toLocaleTimeString()) + '</time><span class="pill ' + (pill[e.level] || "off") + '">' + esc(e.level) + '</span><span class="msg">' + esc(e.msg) + "</span>" + (e.extra ? '<span class="extra">' + esc(JSON.stringify(e.extra)) + "</span>" : "") + "</div>").join("") || '<div class="log-empty">No events recorded yet.</div>';
+    box.innerHTML = l.map(e => '<div class="log-row ' + esc(e.level) + '"><time datetime="' + new Date(e.t).toISOString() + '">' + esc(U.fmtDateTime(e.t, true)) + '</time><span class="pill ' + (pill[e.level] || "off") + '">' + esc(e.level) + '</span><span class="msg">' + esc(e.msg) + "</span>" + (e.extra ? '<span class="extra">' + esc(JSON.stringify(e.extra)) + "</span>" : "") + "</div>").join("") || '<div class="log-empty">No events recorded yet.</div>';
     box.scrollTop = box.scrollHeight;
   }
   async function refresh() {
@@ -33,7 +33,7 @@
   }
   $("copyDiag").addEventListener("click", async () => {
     const l = await D.read();
-    try { await navigator.clipboard.writeText(l.map(e => new Date(e.t).toISOString() + " [" + e.level + "] " + e.msg + (e.extra ? " " + JSON.stringify(e.extra) : "")).join("\n")); toast("Log copied"); }
+    try { await navigator.clipboard.writeText(l.map(e => new Date(e.t).toISOString() + " (" + U.fmtDateTime(e.t, true) + ") [" + e.level + "] " + e.msg + (e.extra ? " " + JSON.stringify(e.extra) : "")).join("\n")); toast("Log copied"); }
     catch (_e) { toast("Could not copy"); }
   });
   refresh(); I.hydrate(document);

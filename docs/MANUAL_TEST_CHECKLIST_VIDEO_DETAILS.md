@@ -39,12 +39,12 @@ Setup: build (`node tools/build-extension.mjs`), load `dist\extension` unpacked,
 
 ## 5. Page features
 
-- [ ] Time zone selector: change it; every date and time changes consistently (spot-check with a known offset). Reload: the choice is remembered.
+- [ ] Time zone: every date and time on every page is Sri Lanka time and ends in `(SLST)` (compare one event with the clock in the Windows taskbar: they must match if your PC is on Sri Lanka time; if the PC is on another zone, the page must still show SLST). There is no zone selector.
 - [ ] Filters: a date range, time-of-day range, device, viewing, event types (e.g. only Paused) and completion status each narrow the timeline, table, sessions and charts; the filter count badge updates; *Clear* resets.
 - [ ] Expand a timeline item and a viewing; both show details (event id, UTC and local time with milliseconds, position, speed, state change, "confirmed and stored").
 - [ ] A viewing recorded before 0.7 is labelled **Summary only** with no timeline.
 - [ ] Charts: five charts with real data; hover shows values; the progress chart's viewing selector works.
-- [ ] Export: events/pauses/viewings CSV (open in a spreadsheet: times in the chosen zone, a title starting with `=` is shown literally), JSON, and **Report for PDF** (print dialog → Save as PDF; the report has the summary, pauses, viewings and events).
+- [ ] Export: events/pauses/viewings CSV (open in a spreadsheet: a UTC column and `timestamp_slst`, a title starting with `=` is shown literally), JSON, and **Report for PDF** (print dialog → Save as PDF; the report has the summary, pauses, viewings and events).
 - [ ] Keyboard only: Tab reaches filters, timeline items (Enter/Space expands), export menu; focus rings are visible. Turn on *Reduce motion* in the OS: pulsing and bump animations stop.
 - [ ] **Phone layout** (DevTools device toolbar ≈ 390 px wide): single column, no horizontal page scroll, the pause table becomes labelled rows, the timeline stays readable.
 
