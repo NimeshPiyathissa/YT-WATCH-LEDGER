@@ -21,17 +21,22 @@ function enc(key, plain) {
   return Buffer.concat([iv, c.getAuthTag(), ct]);
 }
 
+// Every table that stores an encrypted record has a BLOB column named `enc`. They are discovered from the schema rather than listed
+// by hand, so a table added by a later migration (the v0.7.0 playback-event tables were the first to need this) is re-encrypted too.
+export function encryptedTables(db) {
+  return db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all().map(r => r.name)
+    .filter(t => db.prepare(`PRAGMA table_info("${t}")`).all().some(c => c.name === "enc"));
+}
+
 // Throws (and rolls back) if any row can't be decrypted with the old key, so a wrong key changes nothing.
 export function rotate(db, oldB64, newB64) {
   const oldKey = keyOf(oldB64, "OLD_MASTER_KEY"), newKey = keyOf(newB64, "MASTER_KEY");
   if (oldKey.equals(newKey)) throw new Error("old and new keys are identical");
   let n = 0;
   db.transaction(() => {
-    for (const [table, pk] of [["videos", ["device_id", "video_id"]], ["sessions", ["device_id", "session_id"]]]) {
-      const upd = db.prepare(`UPDATE ${table} SET enc=? WHERE ${pk[0]}=? AND ${pk[1]}=?`);
-      for (const r of db.prepare(`SELECT ${pk[0]},${pk[1]},enc FROM ${table}`).all()) {
-        upd.run(enc(newKey, dec(oldKey, r.enc)), r[pk[0]], r[pk[1]]); n++;
-      }
+    for (const table of encryptedTables(db)) {
+      const upd = db.prepare(`UPDATE "${table}" SET enc=? WHERE rowid=?`);
+      for (const r of db.prepare(`SELECT rowid AS id, enc FROM "${table}"`).all()) { upd.run(enc(newKey, dec(oldKey, r.enc)), r.id); n++; }
     }
   })();
   return n;
