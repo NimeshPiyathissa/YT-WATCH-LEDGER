@@ -14,7 +14,7 @@ export const SHARED = [
   ["lib/theme.css", "web/vendor/theme.css"], ["lib/theme-init.js", "web/vendor/theme-init.js"], ["lib/icons.js", "web/vendor/icons.js"],
   ["lib/fonts/bricolage-grotesque-latin-wght-normal.woff2", "web/vendor/fonts/bricolage-grotesque-latin-wght-normal.woff2"], ["lib/fonts/geist-latin-wght-normal.woff2", "web/vendor/fonts/geist-latin-wght-normal.woff2"],
   ["lib/fonts/OFL-bricolage-grotesque.txt", "web/vendor/fonts/OFL-bricolage-grotesque.txt"], ["lib/fonts/OFL-geist.txt", "web/vendor/fonts/OFL-geist.txt"],
-  ["lib/accounting.js", "src/lib/accounting.cjs"]
+  ["lib/accounting.js", "src/lib/accounting.cjs"], ["lib/playback.js", "web/vendor/playback.js"], ["lib/playback.js", "src/lib/playback.cjs"]
 ];
 
 export function drifted() {
