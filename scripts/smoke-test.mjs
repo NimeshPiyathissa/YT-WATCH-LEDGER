@@ -2,6 +2,7 @@
 // Watch Ledger smoke test: talks to a running server over HTTP like a real client. No dependencies (Node 20+).
 //
 //   node scripts/smoke-test.mjs --url https://tracker.example.com            checks that are safe on a production server
+//   node scripts/smoke-test.mjs --url https://tracker.example.com --anonymous   no credentials: only what an outsider can see
 //   node scripts/smoke-test.mjs --url http://127.0.0.1:8787 --full            adds an end-to-end run that WRITES test data
 //
 // Credentials come from the environment, never from arguments (they would land in shell history and process lists):
@@ -16,9 +17,10 @@ import { fileURLToPath } from "node:url";
 
 const args = process.argv.slice(2), has = f => args.includes(f), val = f => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : undefined; };
 if (has("--help") || !val("--url")) { console.error("usage: node scripts/smoke-test.mjs --url <https://host> [--full] [--quiet]\nenv: WL_ADMIN_EMAIL, WL_ADMIN_PASSWORD"); process.exit(2); }
-const BASE = val("--url").replace(/\/+$/, ""), ORIGIN = new URL(BASE).origin, FULL = has("--full"), QUIET = has("--quiet");
+const BASE = val("--url").replace(/\/+$/, ""), ORIGIN = new URL(BASE).origin, FULL = has("--full"), QUIET = has("--quiet"), ANON = has("--anonymous");
 const EMAIL = process.env.WL_ADMIN_EMAIL || "", PASSWORD = process.env.WL_ADMIN_PASSWORD || "";
-if (!EMAIL || !PASSWORD) { console.error("Set WL_ADMIN_EMAIL and WL_ADMIN_PASSWORD in the environment."); process.exit(2); }
+if (FULL && ANON) { console.error("--full needs credentials; it cannot be combined with --anonymous."); process.exit(2); }
+if (!ANON && (!EMAIL || !PASSWORD)) { console.error("Set WL_ADMIN_EMAIL and WL_ADMIN_PASSWORD in the environment."); process.exit(2); }
 
 const results = [];
 const out = s => { if (!QUIET) console.log(s); };
@@ -49,6 +51,8 @@ if (ORIGIN.startsWith("https:")) await check("HTTP redirects to HTTPS", async ()
 
 out("\nAuthentication");
 await check("protected routes refuse an anonymous caller", async () => { for (const p of ["/api/devices", "/api/history", "/api/videos", "/api/system"]) { const r = await call("GET", p, { auth: false }); must(r.status === 401, p + " -> " + r.status); } });
+await check("a bad pairing code is refused", async () => { const r = await call("POST", "/api/enroll", { body: { code: "ZZZZ-ZZZZ", installId: "smoke" }, auth: false }); must(r.status === 400, "status " + r.status); });
+if (!ANON) {
 await check("a wrong password is refused", async () => { const r = await call("POST", "/api/auth/login", { body: { email: EMAIL, password: PASSWORD + "x" }, auth: false }); must(r.status === 401, "status " + r.status); });
 await check("administrator login succeeds, with httpOnly strict cookies", async () => { const r = await call("POST", "/api/auth/login", { body: { email: EMAIL, password: PASSWORD }, auth: false }); must(r.status === 200, "status " + r.status + " " + (r.json?.error || "")); must(r.setCookie.length >= 2 && r.setCookie.every(c => /HttpOnly/i.test(c) && /SameSite=Strict/i.test(c)), "cookie flags"); });
 await check("a cross-origin state-changing request is refused", async () => { const r = await call("POST", "/api/devices/enroll-code", { body: {}, headers: { Origin: "https://evil.example" } }); must(r.status === 403, "status " + r.status); });
@@ -64,7 +68,8 @@ await check("a pairing code can be created (and is cancelled again)", async () =
   must(r.status === 200 && /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(r.json.code || ""), "status " + r.status);
   const c = await call("POST", `/api/pairing-codes/${r.json.id}/revoke`, { body: {} }); must(c.status === 200, "cancel -> " + c.status);
 });
-await check("a bad pairing code is refused", async () => { const r = await call("POST", "/api/enroll", { body: { code: "ZZZZ-ZZZZ", installId: "smoke" }, auth: false }); must(r.status === 400, "status " + r.status); });
+
+}
 
 if (FULL) {
   out("\nEnd to end (writes test data, removes it afterwards)");
@@ -104,7 +109,7 @@ if (FULL) {
     const gone = await call("GET", "/api/video/" + VID); must(gone.status === 404, "video still visible: " + gone.status);
   });
 }
-await call("POST", "/api/auth/logout", { body: {} });
+if (!ANON) await call("POST", "/api/auth/logout", { body: {} });
 
 const failed = results.filter(r => !r.ok);
 out(`\n${results.length - failed.length}/${results.length} checks passed.`);
