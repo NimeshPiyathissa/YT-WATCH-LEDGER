@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master, "release/**"]
+    branches: [main, master, "release/**"]
   pull_request:
+  workflow_dispatch:
 
 # least privilege: the workflows only read the repository and never publish anything
 permissions:
