@@ -72,5 +72,14 @@ t("markup helpers escape everything dynamic", () => {
   assert.ok(rows([["k", "<b>ok</b>", true]]).includes("<b>ok</b>"), "trusted markup is only honoured when flagged");
 });
 
+t("live viewing: off unless the person at the device turned it on, and never managed by the administrator", () => {
+  const base = { now: NOW, sync_server: "https://x.test", device_refresh_present: true, sync_status: "active" };
+  const row = m => m.config.find(c => c.key === "live_view");
+  assert.equal(row(S.model(base)).value, "Off"); assert.equal(row(S.model({ ...base, live_view: true })).value, "On");
+  assert.equal(row(S.model({ ...base, live_view: true })).managed, false); assert.match(row(S.model({ ...base, live_view: true })).note, /Only you can turn this on/);
+  assert.equal(row(S.model({ ...base, live_view: "true" })).value, "Off", "only a real boolean true counts");
+  assert.match(row(S.model({ now: NOW })).note, /after pairing/);
+});
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
