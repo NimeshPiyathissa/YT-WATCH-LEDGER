@@ -113,3 +113,22 @@ test("live viewing is gated: with it off the owner gets no stream and no current
   const live2 = (await app.inject({ method: "GET", url: "/api/video/vidLive/live", headers: { cookie: A } })).json();
   assert.equal(live2.current.liveView, true); assert.equal(live2.current.session.state, "paused");
 });
+
+test("a device can only ever report its own state; hostile values are clamped, truncated or ignored", async () => {
+  const { app, db, A, dev: d1 } = await setup();
+  const d2 = await enrollDevice(app, A, "Second");
+  const push = (d, payload) => app.inject({ method: "POST", url: "/api/sync/push", headers: d.auth, payload });
+  await push(d1, { sessions: [], consents: { liveView: true } });
+  await push(d2, { sessions: [], consents: { liveView: false }, deviceId: d1.deviceId, device_id: d1.deviceId });   // naming another device changes nothing
+  const live = id => db.prepare("SELECT live_view FROM devices WHERE id=?").get(id).live_view;
+  assert.equal(live(d1.deviceId), 1, "the second device cannot turn the first one off"); assert.equal(live(d2.deviceId), 0);
+  await push(d1, { sessions: [], queue: { events: -5, dropped: 1e99 }, lastError: "<img src=x onerror=alert(1)>" + "x".repeat(900), lastErrorKind: "<script>" });
+  const row = db.prepare("SELECT queue_events,queue_dropped FROM devices WHERE id=?").get(d1.deviceId);
+  assert.deepEqual({ ...row }, { queue_events: 0, queue_dropped: 1e7 }, "negative and absurd counts are clamped");
+  const err = db.prepare("SELECT kind,message FROM device_sync_errors WHERE device_id=?").get(d1.deviceId);
+  assert.equal(err.kind, "other"); assert.ok(err.message.length <= 300, "message truncated");
+  for (const bad of [{ consents: "yes" }, { consents: [1, 2] }, { consents: { liveView: { $gt: 0 } } }, { queue: "many" }, { consents: null }]) assert.equal((await push(d1, { sessions: [], ...bad })).statusCode, 200, "junk is ignored, never an error: " + JSON.stringify(bad));
+  assert.equal(live(d1.deviceId), 1, "and never changes the stored consent");
+  const r = await app.inject({ method: "POST", url: "/api/sync/push", headers: { authorization: "Bearer nope" }, payload: { sessions: [], consents: { liveView: true } } });
+  assert.ok(r.statusCode === 401 || r.statusCode === 403, "an unauthenticated caller cannot report consent");
+});

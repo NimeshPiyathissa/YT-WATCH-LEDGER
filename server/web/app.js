@@ -78,7 +78,7 @@
   };
   const clock = ms => { const t = Math.max(0, Math.floor((ms || 0) / 1000)), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), x = t % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); };
   // The small surface the Video Details module (video.js) uses; everything else in this file stays private.
-  window.WL = { api, download, toast, errText, refreshed, guarded, empty: (...a) => empty(...a), head: (...a) => head(...a), chip: (...a) => chip(...a), loadDevices: () => loadDevices(), devices: () => devices };
+  window.WL = { api, download, toast, errText, refreshed, guarded, confirmDialog: (...a) => confirmDialog(...a), empty: (...a) => empty(...a), head: (...a) => head(...a), chip: (...a) => chip(...a), loadDevices: () => loadDevices(), devices: () => devices };
   async function loadDevices() {
     devices = (await api("GET", "/api/devices")).slice().sort((a, b) => a.enrolled_at - b.enrolled_at);
     // the sidebar badge counts devices awaiting approval plus session deletion requests awaiting a decision
@@ -122,7 +122,7 @@
   /* ---- router ---- */
   function route() {
     routeGen++;
-    clearInterval(timer); timer = null; clearInterval(cpTimer); cpTimer = null; closeEvents(); window.WLVideo.dispose(); window.WLHealth.dispose();
+    clearInterval(timer); timer = null; clearInterval(cpTimer); cpTimer = null; closeEvents(); window.WLVideo.dispose(); window.WLHealth.dispose(); window.WLDeviceCenter.dispose();
     const h = location.hash || "#/overview";
     const login = h === "#/login";
     $("login").hidden = !login; $("shell").hidden = login;
@@ -397,16 +397,21 @@
         <div><span class="k">Last active</span><span class="v" title="${esc(d.last_active ? U.fmtDateTime(d.last_active) : "")}">${esc(d.realtime ? "now" : ago(d.last_active))}</span></div>
         <div><span class="k">Sessions</span><span class="v num">${d.active_sessions} active</span></div>
         <div><span class="k">Channel</span><span class="v">${d.realtime ? "Live" : d.connection === "online" ? "Polling" : "None"}</span></div>
+        <div><span class="k">Live viewing</span><span class="v">${d.live_view ? `<span class="live-chip" title="The person at the device allowed it">${ic("eye")}ON</span>` : "Off"}</span></div>
       </div>
+      ${d.queue_dropped > 0 ? `<p class="alert warn dev-req">${ic("triangle-alert")}<span><b>${d.queue_dropped} event${d.queue_dropped === 1 ? "" : "s"} stayed on the device</b> because its upload queue hit its limit while it was offline. Open Controls for diagnostics.</span></p>` : ""}
       <dl class="kv"><dt>Last upload</dt><dd>${esc(ago(d.last_push_at))}${d.last_push_at ? ` <span class="muted small">(${esc(U.fmtDateTime(d.last_push_at))})</span>` : ""}</dd>
         <dt>Pending on device</dt><dd class="num">${d.pending_count || 0} event${d.pending_count === 1 ? "" : "s"} waiting to upload</dd>
         <dt>Records here</dt><dd class="num">${d.counts.sessions} sessions · ${d.counts.videos} videos</dd>
         <dt>Device clock</dt><dd class="num">${d.clock_skew_ms ? Math.abs(Math.round(d.clock_skew_ms / 60000)) + " min " + (d.clock_skew_ms > 0 ? "behind" : "ahead") + ", corrected" : "in step with the server"}</dd>
         <dt>Paired</dt><dd>${esc(when(d.approved_at || d.enrolled_at))}${d.pairings > 1 ? ` <span class="muted small">(${d.pairings} pairings)</span>` : ""}</dd>
         ${d.last_error ? `<dt>Last error on device</dt><dd class="err">${esc(d.last_error)}</dd>` : ""}</dl>
-      <div class="actions"><a class="btn" href="#/history" data-act="hist">${ic("history")}View history</a><a class="btn" href="#/device/${esc(d.id)}">${ic("sliders-horizontal")}Controls</a><button class="btn" data-act="rename" type="button">${ic("pencil")}Rename</button>
+      <div class="actions"><a class="btn" href="#/history" data-act="hist">${ic("history")}View history</a><a class="btn" href="#/device/${esc(d.id)}">${ic("activity")}Diagnostics &amp; controls</a><button class="btn" data-act="rename" type="button">${ic("pencil")}Rename</button>
         <button class="btn btn-danger" data-act="revoke" type="button" ${d.status !== "active" ? "disabled" : ""}>${ic("unlink")}Revoke access</button><button class="btn btn-danger" data-act="remove" type="button">${ic("trash-2")}Remove device</button></div></article>`;
   }
+
+  // A destructive button asks first, in a dialog that says what will happen (native <dialog>: focus is trapped, Esc cancels).
+  const confirmThen = (btn, opts, run) => { if (btn) btn.onclick = async () => { if (await confirmDialog(opts)) await run(); }; };
 
   const DTABS = [["devices", "Devices"], ["requests", "Session deletion requests"], ["sessions", "Active sessions"], ["pairing", "Pairing history"]];
 
@@ -451,9 +456,10 @@
       box.querySelectorAll("article").forEach(card => {
         const id = card.dataset.id, d = devices.find(x => x.id === id), btn = a => card.querySelector(`[data-act="${a}"]`);
         if (btn("approve")) btn("approve").onclick = act(() => api("POST", `/api/devices/${id}/approve`), "Approved. The device is connected.");
-        twoStep(btn("reject"), "Click again to reject", act(() => api("DELETE", `/api/devices/${id}`), "Rejected and removed."));
-        twoStep(btn("revoke"), "Click again to revoke", act(() => api("POST", `/api/devices/${id}/revoke`), "Revoked. It can no longer upload or read anything."));
-        twoStep(btn("remove"), "Click again: delete device and its data", act(() => api("DELETE", `/api/devices/${id}`), "Device and its synced data deleted."));
+        const name = (d && d.label) || "this device";
+        confirmThen(btn("reject"), { title: "Reject " + name + "?", body: "It is removed together with its pairing credential. Nothing it could upload has been accepted yet. To connect it later, generate a new pairing code.", ok: "Reject and remove", danger: true }, act(() => api("DELETE", `/api/devices/${id}`), "Rejected and removed."));
+        confirmThen(btn("revoke"), { title: "Revoke access for " + name + "?", body: "It stops uploading and can no longer read anything, effective immediately (even for a connected browser). Data it already uploaded stays here. You can pair it again later with a new code.", ok: "Revoke access", danger: true }, act(() => api("POST", `/api/devices/${id}/revoke`), "Revoked. It can no longer upload or read anything."));
+        confirmThen(btn("remove"), { title: "Delete " + name + " and its synced data?", body: "This permanently deletes the device and every viewing and event it uploaded from this server. It cannot be undone, and older backups still contain the data. History kept on the device itself is not touched.", ok: "Delete device and data", danger: true }, act(() => api("DELETE", `/api/devices/${id}`), "Device and its synced data deleted."));
         if (btn("hist")) btn("hist").onclick = () => { hf.device = id; };
         if (btn("rename")) btn("rename").onclick = () => {
           const h = card.querySelector(".top .row, .top div");
@@ -573,6 +579,7 @@
     const active = dev.status === "active", dis = active ? "" : "disabled";
     app.innerHTML = `<div><a class="back" href="#/devices">${ic("arrow-left")}Devices</a></div>
       ${head(`<span class="row">${esc(dev.label || "Device")} ${pill(syncState(dev))}</span>`, "Commands wait on the server and are applied the next time the extension syncs (within about five minutes). They are visible on the device. They change data stored <b>on that laptop</b>; to delete what is stored on this server use <a href=\"#/data\">Data &amp; backups</a>.")}
+      <div id="dcMount"></div>
       <section class="card stack" id="cfgCard" aria-labelledby="cfgT"><div class="card-head"><h3 id="cfgT">${ic("sliders-horizontal")}Configuration</h3><span id="cfgState"></span></div>
         <p class="muted">Settings the extension applies on this device. It checks every value and reports back; an offline device picks them up when it reconnects. These settings cannot turn tracking on or off or change what is collected, and the person using the browser can still pause tracking, delete their data or remove the extension.</p>
         <div class="filters"><label class="field">Keep history for<select class="input" id="cfgRet"><option value="">Device's own setting</option><option value="0">Forever</option>${[7, 30, 90, 180, 365, 730].map(n => `<option value="${n}">${n} days</option>`).join("")}</select></label>
@@ -586,14 +593,17 @@
         ${active ? "" : '<p class="note">Only approved, non-revoked devices can receive commands.</p>'}<div class="err" id="cErr" role="alert" hidden></div></section>
       <section class="card flush"><div class="card-head"><h3>Recent commands</h3></div>${commands.length ? `<table class="table rtable"><thead><tr><th>Command</th><th>Status</th><th>Queued</th><th>Result</th></tr></thead><tbody>
         ${commands.map(c => `<tr><td data-primary><span class="cell-primary mono">${esc(c.type)}</span> <span class="cell-sub">${esc(Object.keys(c.payload).length ? JSON.stringify(c.payload) : "")}</span></td><td data-label="Status">${esc(c.status)}</td><td class="num" data-label="Queued">${esc(when(c.created_at))}</td><td data-label="Result">${esc(c.result ? c.result.status + (c.result.error ? ": " + c.result.error : "") : "waiting")}</td></tr>`).join("")}</tbody></table>` : empty("terminal", "No commands yet", "Commands you send to this device are listed here with their result.")}</section>`;
+    window.WLDeviceCenter.mount($("dcMount"), dev);
     const send = guarded(async (type, payload) => { await api("POST", `/api/devices/${id}/commands`, { type, payload }); toast("Queued. It applies on the device's next sync."); await pageDevice(id); });
     app.querySelectorAll("[data-cmd]").forEach(b => b.onclick = () => send(b.dataset.cmd, {}));
     setupConfig(id, active);
-    twoStep($("dAll"), "Click again: delete ALL history on the device", () => send("delete_all", {}));
-    twoStep($("dRange"), "Click again to confirm range delete", () => {
+    confirmThen($("dAll"), { title: "Delete ALL history on " + (dev.label || "the device") + "?", body: "The extension deletes everything it has stored locally the next time it syncs. The person at the device is told that you did this. Data already uploaded to this server is not affected.", ok: "Delete all on device", danger: true }, () => send("delete_all", {}));
+    $("dRange").onclick = async () => {
       if (!$("dFrom").value || !$("dTo").value) { $("cErr").textContent = "Pick both dates."; $("cErr").hidden = false; return; }
-      $("cErr").hidden = true; return send("delete_range", { from: dayStart($("dFrom").value), to: dayEnd($("dTo").value) });
-    });
+      $("cErr").hidden = true;
+      if (await confirmDialog({ title: "Delete " + $("dFrom").value + " to " + $("dTo").value + " on the device?", body: "The extension deletes that range from its local history the next time it syncs. The person at the device is told. Data already uploaded here is not affected.", ok: "Delete range", danger: true }))
+        return send("delete_range", { from: dayStart($("dFrom").value), to: dayEnd($("dTo").value) });
+    };
   }
 
   /* ---- one device: server-managed configuration (owner only; the server re-checks every request) ---- */

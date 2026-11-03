@@ -5,7 +5,7 @@
    locally between events. Nothing is extrapolated for a device that is offline. */
 (function () {
   "use strict";
-  const WL = new Proxy({}, { get: (_t, k) => window.WL[k] }), P = window.YTPlayback, U = window.YTUtil, CH = window.WLVideoCharts, esc = U.escapeHtml, ic = window.YTIcons.icon;
+  const WL = new Proxy({}, { get: (_t, k) => window.WL[k] }), TL = window.WLTimeline, P = window.YTPlayback, U = window.YTUtil, CH = window.WLVideoCharts, esc = U.escapeHtml, ic = window.YTIcons.icon;
   const $ = id => document.getElementById(id);
   const REDUCED = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const TL_STEP = 300, EVENT_LIMIT = 2000;
@@ -68,7 +68,7 @@
     if (!alive(s)) return null;
     s.offset = detail.serverNow - Date.now();
     s.detail = detail; s.sessions = sessions.items; s.pauses = pauses.items; s.pauseStats = pauses.stats; s.pauseDist = pauses.distribution; s.analytics = analytics;
-    s.events = events.items.slice().reverse(); s.eventTotal = events.total; s.ids = new Set(s.events.map(e => e.id));
+    s.events = TL.normalize(events.items); s.eventTotal = events.total; s.ids = new Set(s.events.map(e => e.id));
     // the open viewings are folded locally from here on: fetch their complete event lists once
     s.local = new Map();
     await Promise.all(s.sessions.filter(x => x.hasEvents && x.metrics.status === "open").map(x => loadLocal(x.sessionId, x.skewMs)));
@@ -86,9 +86,11 @@
   const summaryOnly = () => st.sessions.filter(s => !s.hasEvents);
   const deviceOf = id => (st.detail && st.detail.devices.find(d => d.id === id)) || null;
   const isOnline = id => { const d = deviceOf(id); return !!(d && d.online); };
+  // Current state is shown only for a device whose user has allowed live viewing (the server enforces it too: no stream, no current state).
+  const liveAllowed = id => { const d = deviceOf(id); return !!(d && d.liveView === true); };
   const openPauseOf = s => st.pauses.find(p => p.sessionId === s.sessionId && p.status === "open") || null;
   function projected(s) {
-    const live = s.metrics.status === "open" && isOnline(s.deviceId);
+    const live = s.metrics.status === "open" && isOnline(s.deviceId) && liveAllowed(s.deviceId);
     return P.project({ metrics: s.metrics, pauses: openPauseOf(s) ? [{ status: "open", pausedAt: openPauseOf(s).pausedAt, pausedPos: openPauseOf(s).pausedPos }] : [] }, serverNow(), { frozen: !live });
   }
   function totals() {
@@ -110,6 +112,7 @@
     const open = eventSessions().filter(s => s.metrics.status === "open").sort((a, b) => b.metrics.lastEventAt - a.metrics.lastEventAt)[0];
     if (open) {
       const m = projected(open), on = isOnline(open.deviceId);
+      if (!liveAllowed(open.deviceId)) return { key: "notlive", text: "LIVE VIEW OFF", sub: "The person at this device has not allowed live viewing. This page shows what was recorded up to the last sync (" + dBoth(open.metrics.lastEventAt) + ").", session: open, m };
       if (!on) return { key: "offline", text: "DEVICE OFFLINE", sub: "Last event " + dBoth(open.metrics.lastEventAt) + ". Timers are frozen until it reconnects.", session: open, m };
       switch (open.metrics.state) {
         case "playing": return { key: "playing", text: "LIVE WATCHING", sub: "Playing at " + clock(m.lastPos + (serverNow() - open.metrics.since) / 1000 * (open.metrics.rate || 1)) + " · " + (open.metrics.rate || 1) + "×", session: open, m };
@@ -162,7 +165,9 @@
           <fieldset class="vd-types"><legend>Event types</legend>${TYPES.map(t => `<label class="vd-check"><input type="checkbox" value="${t}" /><span>${esc(KIND[t][0])}</span></label>`).join("")}</fieldset>
           <p class="vd-hint">Dates and times are read in Sri Lanka time (SLST). The time of day applies to the first and last date. <button class="vd-link" id="fClear" type="button">Clear all filters</button></p>
         </form></section>
+      <section class="vd-glass" aria-labelledby="vdRbH"><div class="vd-head"><h2 class="vd-h" id="vdRbH">${ic("film")}Timeline overview</h2></div><div id="vdRibbon"></div></section>
       <section class="vd-glass" aria-labelledby="vdTlH"><div class="vd-head"><h2 class="vd-h" id="vdTlH">${ic("activity")}Activity timeline</h2><div class="vd-tools"><button class="vd-btn vd-btn-sm" id="vdSort" type="button">Newest first</button></div></div>
+        <div class="vd-quick" id="vdQuick" role="group" aria-label="Quick filters"></div>
         <p class="vd-hint" id="vdTlNote"></p><ol class="vd-tl" id="vdTl" aria-live="off"></ol><div class="vd-more"><button class="vd-btn" id="vdTlMore" type="button" hidden>Show older events</button></div></section>
       <section class="vd-glass" aria-labelledby="vdPaH"><div class="vd-head"><h2 class="vd-h" id="vdPaH">${ic("pause")}Pause and resume</h2></div><div id="vdPause"></div></section>
       <section class="vd-glass" aria-labelledby="vdSeH"><div class="vd-head"><h2 class="vd-h" id="vdSeH">${ic("history")}Watch sessions</h2></div><div id="vdSess" class="vd-sessions"></div></section>
@@ -290,13 +295,66 @@
     ];
     return `<dl class="vd-ev-kv" id="x-${esc(e.id)}">${kv.map(r => `<div><dt>${r[0]}</dt><dd>${r[1]}</dd></div>`).join("")}</dl>`;
   }
+  /* ---- timeline v2: viewing boundaries, quick filters, the interactive overview ---- */
+  function timelineRows(vis) {
+    const numOf = new Map(vis.map(x => [x.e.id, x.n])), asc = (st.sortDesc ? vis.slice().reverse() : vis).map(x => x.e);
+    const meta = {}; for (const s of st.sessions) meta[s.sessionId] = { deviceLabel: s.deviceLabel, startedAt: s.startedAt, endedAt: s.endedAt, state: s.state, completed: s.completed };
+    const items = TL.withBoundaries(asc, meta);
+    return (st.sortDesc ? items.slice().reverse() : items).map(x => x.kind === "event" ? tlItem(x.e, numOf.get(x.e.id)) : boundaryItem(x));
+  }
+  function boundaryItem(b) {
+    const start = b.edge === "start", s = b.meta;
+    const sub = start ? esc(dBoth(b.at)) : b.open ? "last event " + esc(dBoth(b.at)) + " (viewing still open, or its end is not in this list)" : esc(dBoth(b.at)) + (s && s.state === "interrupted" ? " · interrupted" : s && s.completed ? " · completed" : "");
+    return `<li class="vd-bound ${start ? "start" : "end"}" role="separator" aria-label="${start ? "Viewing started" : "Viewing ended"}"><span class="vd-bound-l">${ic(start ? "play" : "check")}${start ? "Viewing started" : "Viewing ended"}</span><span class="vd-bound-d">${esc(b.deviceLabel)}</span><span class="vd-bound-t num">${sub}</span></li>`;
+  }
+  function renderQuick() {
+    const cur = TL.groupOf(st.F.types);
+    $("vdQuick").innerHTML = TL.GROUPS.map(g => `<button type="button" class="vd-qf" data-g="${g.key}" aria-pressed="${g.key === cur}">${esc(g.label)}</button>`).join("");
+    $("vdQuick").querySelectorAll("[data-g]").forEach(b => b.onclick = () => {
+      st.F.types = new Set(TL.typesOf(b.dataset.g));
+      document.querySelectorAll("#vdFBody .vd-types input").forEach(i => { i.checked = st.F.types.has(i.value); });
+      reload();
+    });
+  }
+  const KCLS = { VIDEO_STARTED: "k-start", VIDEO_PLAYING: "k-play", VIDEO_PAUSED: "k-pause", VIDEO_RESUMED: "k-resume", VIDEO_SEEKED: "k-seek", VIDEO_BUFFERING_STARTED: "k-buffer", VIDEO_BUFFERING_ENDED: "k-buffer",
+    VIDEO_COMPLETED: "k-done", VIDEO_REPLAYED: "k-resume", VIDEO_TAB_HIDDEN: "k-tab", VIDEO_TAB_VISIBLE: "k-tab", VIDEO_SESSION_ENDED: "k-end", VIDEO_SESSION_INTERRUPTED: "k-bad", MIXED: "k-mix" };
+  function renderRibbon() {
+    const box = $("vdRibbon"), r = TL.ribbon(st.events, st.pauses);
+    if (!r.lanes.length) { box.innerHTML = `<p class="vd-hint">${ic("film")} No events to draw${filterCount() ? " for these filters" : " yet"}.</p>`; return; }
+    const H = 28, lanes = r.lanes.map((l, i) => {
+      const mk = l.markers.map(m => `<line class="mk ${KCLS[m.type] || "k-play"}" x1="${m.x}" x2="${m.x}" y1="4" y2="${H - 4}" data-id="${esc(m.id)}" data-at="${m.at}" data-n="${m.count}" tabindex="0" role="button" aria-label="${esc(m.count > 1 ? m.count + " events from " + dBoth(m.at) : (KIND[m.type] ? KIND[m.type][0] : m.type) + " at " + dBoth(m.at))}"><title>${esc(m.count > 1 ? m.count + " events near " + dBoth(m.at) : (KIND[m.type] ? KIND[m.type][0] : m.type) + " · " + dBoth(m.at) + " · " + clock(m.pos))}</title></line>`).join("");
+      const ps = l.pauses.map(p => `<rect class="pz ${esc(p.status)}" x="${p.x0}" y="9" width="${Math.max(0.5, p.x1 - p.x0)}" height="${H - 18}" rx="2"/>`).join("");
+      return `<div class="rb-lane"><div class="rb-l" title="${esc(dBoth(l.first))}"><span class="mono">${esc(String(l.sessionId).slice(0, 8))}</span><small>${esc(l.deviceLabel)}</small><small class="num">${esc(dur(l.durationMs))} · ${l.events} events</small></div><svg viewBox="0 0 1000 ${H}" preserveAspectRatio="none" role="group" aria-label="Viewing ${i + 1}: ${l.events} events"><rect class="rb-span" x="${l.x0}" y="${H / 2 - 1}" width="${Math.max(1, l.x1 - l.x0)}" height="2"/>${ps}${mk}</svg></div>`;
+    }).join("");
+    box.innerHTML = `<p class="vd-hint">One row per viewing, each stretched over its own length. Markers are events; shaded spans are pauses. Click or press Enter on a marker to jump to it in the list below.</p>
+      <div class="rb">${lanes}</div>
+      <p class="vd-hint rb-info" id="rbInfo" role="status" aria-live="polite">Hover or focus a marker for details.</p>`;
+    const info = $("rbInfo");
+    box.querySelectorAll("line.mk").forEach(m => {
+      const say = () => { info.textContent = (m.getAttribute("aria-label") || ""); };
+      m.addEventListener("mouseenter", say); m.addEventListener("focus", say);
+      m.onclick = () => focusEvent(m.dataset.id);
+      m.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); focusEvent(m.dataset.id); } });
+    });
+  }
+  // Jump from the overview to one event in the list: make sure it is shown (not hidden behind "show more"), open it, scroll to it, flash it.
+  function focusEvent(id) {
+    if (!st.events.some(e => e.id === id)) return;
+    const asc = st.events.map(e => e.id), idx = st.sortDesc ? asc.length - 1 - asc.indexOf(id) : asc.indexOf(id);
+    if (idx >= st.tlLimit) st.tlLimit = Math.ceil((idx + 1) / TL_STEP) * TL_STEP;
+    st.open.add(id); renderTimeline();
+    const li = document.querySelector(`#vdTl li[data-id="${CSS.escape(id)}"]`);
+    if (li) { li.scrollIntoView({ block: "center", behavior: REDUCED() ? "auto" : "smooth" }); li.classList.add("hl"); setTimeout(() => li.classList.remove("hl"), 2200); const b = li.querySelector(".vd-ev-btn"); if (b) b.focus({ preventScroll: true }); }
+  }
+
   function renderTimeline() {
     const list = st.events.slice(), total = st.eventTotal, firstNo = total - list.length + 1;
     const ordered = st.sortDesc ? list.map((e, i) => ({ e, n: firstNo + i })).reverse() : list.map((e, i) => ({ e, n: firstNo + i }));
     const vis = ordered.slice(0, st.tlLimit);
-    $("vdTl").innerHTML = vis.length ? vis.map(x => tlItem(x.e, x.n)).join("") : `<li class="vd-empty">${ic("film")}<p>No events match. ${filterCount() ? "Clear a filter to see more." : "Events appear here as the extension records them."}</p></li>`;
+    $("vdTl").innerHTML = vis.length ? timelineRows(vis).join("") : `<li class="vd-empty">${ic("film")}<p>No events match. ${filterCount() ? "Clear a filter to see more." : "Events appear here as the extension records them."}</p></li>`;
     $("vdTlMore").hidden = ordered.length <= vis.length; $("vdTlMore").textContent = `Show ${Math.min(TL_STEP, ordered.length - vis.length)} more (${ordered.length - vis.length} hidden)`;
     $("vdSort").textContent = st.sortDesc ? "Newest first" : "Oldest first";
+    renderQuick(); renderRibbon();
     const dev = st.detail.devices.filter(d => st.F.device === "all" || d.id === st.F.device);
     $("vdTlNote").innerHTML = `Every event listed here is <b>confirmed</b>: the server has stored it. Events a device records while it is offline are held on that device and appear here, in order, when it reconnects${dev.length ? " (" + dev.map(d => esc(d.label) + (d.lastEventsAt ? " last delivered " + esc(dBoth(d.lastEventsAt)) : " has not delivered events yet")).join("; ") + ")" : ""}.${total > list.length ? ` Showing the latest ${list.length} of ${total}; narrow the filters or export for the rest.` : ""} Last sync <span class="num" id="vdLast">${esc(st.lastSync ? dBoth(st.lastSync) : "—")}</span>.`;
   }
@@ -407,7 +465,7 @@
     if (!alive(s)) return;
     const shownNew = fresh.filter(matches);
     for (const e of shownNew) { s.ids.add(e.id); s.events.push(e); s.fresh.add(e.id); s.eventTotal++; }
-    s.events.sort((a, b) => a.tsAdj - b.tsAdj || a.seq - b.seq);
+    s.events = TL.normalize(s.events);
     for (const sid of new Set(fresh.map(e => e.sessionId))) refold(sid);
     s.lastSync = serverNow(); if (s.conn !== "live") setConn("live");
     renderAll();

@@ -67,6 +67,9 @@ try {
   if (status !== 200) throw new Error("cannot continue without signing in");
   await ev(`localStorage.setItem('yt_theme', ${JSON.stringify(THEME)}); 1`);
   if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
+  // a device page too, when the server has a device
+  const firstDevice = await ev(`fetch("/api/devices",{credentials:"same-origin"}).then(r=>r.json()).then(l=>l[0]?l[0].id:"")`).catch(() => "");
+  if (/^[\w-]+$/.test(firstDevice)) PAGES.push(["device", "#/device/" + firstDevice, null]);
 
   for (const [sn, w, h, mobile] of SIZES) {
     await send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 1, mobile });
