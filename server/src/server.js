@@ -21,7 +21,7 @@ if (prod && !hasTls && env.TRUST_PROXY !== "true") {
 if (prod && !env.BASE_URL.startsWith("https://")) { console.error("BASE_URL must be https:// in production"); process.exit(1); }
 
 const dbPath = env.DB_PATH || "./data/tracker.db";
-const config = { dbPath, backupDir: env.BACKUP_DIR || "./data/backups", backupKeep: Number(env.BACKUP_KEEP || 14) };
+const config = { dbPath, backupDir: env.BACKUP_DIR || "./data/backups", backupKeep: Number(env.BACKUP_KEEP || 14), backupIntervalHours: Number(env.BACKUP_INTERVAL_HOURS || 24) };
 const db = openDb(dbPath);
 const applied = migrate(db);
 if (applied.length) console.log("migrations applied: " + applied.join(", "));
