@@ -52,3 +52,11 @@ Run the check in [`INSTALL.md`](INSTALL.md#4-connect-the-browser-to-the-dashboar
 - **After a session ends**, the extension keeps the browser permission to contact the server address until you remove it at `chrome://extensions` → Details → Site access.
 - **Migration 004 is one-way** (see [`INSTALL.md`](INSTALL.md#1-run-the-server)): back up before upgrading.
 - Existing limits from earlier versions still apply (see README, *Limitations*).
+
+## 5. Live viewing needs the v0.8 extension
+
+Live viewing is a consent the person at the device gives in the extension popup. An extension older than v0.8 cannot give it, so its device shows **LIVE VIEW OFF** in Video Details even while it is playing. History is unaffected. Update the extension on that device ([UPGRADING.md](UPGRADING.md)). See [LIVE_MONITORING.md](LIVE_MONITORING.md).
+
+## 6. The popup can scroll
+
+The v0.8 popup shows more (status, queue, live viewing). Chrome limits a popup to 600 px, so on a small window it scrolls inside the popup. Not yet tuned for a more compact layout.

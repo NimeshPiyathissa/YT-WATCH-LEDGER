@@ -4,7 +4,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased] - v0.8.0 development (branch `develop/v0.8.0`)
 
-### v0.8.0-alpha (this milestone)
+### v0.8.0-beta.1 (this milestone; includes everything under alpha)
+#### Added
+- **Device Control Center** on every device page: Diagnostics (plain checks with fixes), Activity (merged history), Permissions (consent as reported by the device; the owner cannot change it). Confirmation dialogs for destructive actions.
+- **Live viewing consent.** Per pairing, off by default, switched only in the extension popup, visible there and on the toolbar badge, enforced by the server (no stream and no current state without it), audited. See `docs/LIVE_MONITORING.md`.
+- **Extension popup v2**: status hero, plain-language errors, retry countdown, queue and limit, manual Reconnect, connection details, live-viewing switch.
+- **Smart sync engine**: failures classified, backoff with jitter and `Retry-After`, a few quick retries then the alarm, a rejected batch narrowed to the one bad item, a bounded event queue (events stay on the device), consent and queue state reported to the server. See `docs/SYNC_ENGINE.md`.
+- **Timeline v2**: interactive overview ribbon, quick filters, viewing boundary rows, one tested ordering and de-duplication module.
+- Migration `007_device_consents_sync_diagnostics.sql` (additive, tested against a real v0.7.0 database); `device_sync_errors` history; Health Center warns about queue overflow.
+- `docs/UPGRADING.md` (upgrade and rollback), `BUG_FIX_REPORT.md`.
+- The extension's `manifest.json` now carries `version_name` (`0.8.0-beta.1`); the ZIP is named after it.
+
+#### Changed (privacy)
+- Without live viewing, uploads of a running viewing wait for the regular sync (the end of a viewing still uploads after a few seconds) instead of going out about every 5-10 seconds. Devices on an older extension cannot enable live viewing until updated.
+
+#### Fixed
+- Events that share a timestamp are no longer interleaved between viewings; duplicates are shown once.
+- A rejected upload batch no longer blocks the queue for ever; the offline queue is bounded; retries no longer loop. See `BUG_FIX_REPORT.md` for each defect, how it was confirmed and its test.
+- The popup could show stale state when two refreshes overlapped.
+
+### v0.8.0-alpha
 #### Added
 - **Analytics** page and `GET /api/analytics`: today / 7 / 30 / 90 days or a custom range, day / week / month grouping, comparison with the previous period, watch time by hour and weekday, time per device, top videos and channels. Time comes from recorded playback runs; overlapping playback on one device is counted once; days follow Sri Lanka time.
 - **Health Center** page and owner-only `GET /api/system/health`: uptime, CPU, memory, disk, database, devices online, sync errors and backup age, with explainable warnings.

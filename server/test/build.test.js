@@ -34,7 +34,7 @@ test("the build is a valid MV3 package: manifest, version consistency, every ref
   const out = tmp(), r = build(["--out", out]);
   const z = readZip(r.zipPath), m = JSON.parse(z["manifest.json"]);
   assert.deepEqual([m.manifest_version, m.version], [3, manifest.version]);
-  assert.match(path.basename(r.zipPath), new RegExp(`^yt-watch-tracker-v${manifest.version.replace(/\./g, "\\.")}\\.zip$`));
+  assert.match(path.basename(r.zipPath), new RegExp(`^yt-watch-tracker-v${(manifest.version_name || manifest.version).replace(/\./g, "\\.")}\\.zip$`));
   assert.deepEqual(m.permissions, ["storage", "alarms"], "no permissions beyond the existing two");
   assert.equal("key" in m, false, "no custom key unless one is supplied");
   for (const f of ["background.js", "popup/popup.html", "popup/popup.js", "lib/sync.js", "lib/realtime.js", "lib/build-config.js", "icons/icon16.png", "icons/icon48.png", "icons/icon128.png", "content/tracker.js", "admin/admin.html"])
@@ -73,7 +73,7 @@ test("--key-file: a public key gives a stable extension id; a private key or jun
   assert.equal(m.key, publicKey.export({ type: "spki", format: "der" }).toString("base64"));
   assert.throws(() => build(["--out", path.join(dir, "o3"), "--key-file", path.join(dir, "priv.pem")]), /PRIVATE key/);
   assert.throws(() => build(["--out", path.join(dir, "o4"), "--key-file", path.join(dir, "junk.txt")]), BuildError);
-  assert.equal(fs.existsSync(path.join(dir, "o3", "yt-watch-tracker-v" + manifest.version + ".zip")), false, "a refused build writes no ZIP");
+  assert.equal(fs.existsSync(path.join(dir, "o3", "yt-watch-tracker-v" + (manifest.version_name || manifest.version) + ".zip")), false, "a refused build writes no ZIP");
 });
 
 test("the manifest, the version the extension reports, and the server's real-time cut-off agree", () => {

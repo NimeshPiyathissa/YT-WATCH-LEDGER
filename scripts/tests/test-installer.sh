@@ -42,6 +42,13 @@ check_not "password: contains the email name" strong_password 'ownerNAME-2026-xy
 check_not "password: four repeated characters" strong_password 'Abcd1111!!zzzz'
 check_not "password: a common word" strong_password 'MyPassword-2026!x'
 check "version_ge: 0.7.1 >= 0.7.0" version_ge 0.7.1 0.7.0
+check "version_ge: 0.8.0 >= 0.8.0-rc.1 (a release outranks its pre-releases)" version_ge 0.8.0 0.8.0-rc.1
+check_not "version_ge: 0.8.0-beta.1 < 0.8.0" version_ge 0.8.0-beta.1 0.8.0
+check "version_ge: 0.8.0-rc.1 >= 0.8.0-beta.2" version_ge 0.8.0-rc.1 0.8.0-beta.2
+check_not "version_ge: 0.8.0-beta.1 < 0.8.0-beta.2" version_ge 0.8.0-beta.1 0.8.0-beta.2
+check "version_ge: 0.8.0-beta.1 >= 0.8.0-beta.1" version_ge 0.8.0-beta.1 0.8.0-beta.1
+check_not "version_ge: 0.8.0-rc.1 < 0.9.0-beta.1" version_ge 0.8.0-rc.1 0.9.0-beta.1
+check "version_ge: v0.9.0-beta.1 >= 0.8.9" version_ge v0.9.0-beta.1 0.8.9
 check "version_ge: v0.10.0 >= 0.9.9 (numeric, not alphabetic)" version_ge v0.10.0 0.9.9
 check_not "version_ge: 0.6.9 < 0.7.0" version_ge 0.6.9 0.7.0
 valid_semver v1.2.3 && valid_semver 1.2.3-rc.1 && ! valid_semver "1.2" && pass "semver: validation" || flunk "semver: validation"
@@ -154,9 +161,10 @@ bash "$REPO/scripts/restore.sh" --yes "$TMPBASE/corrupt.db" >/dev/null 2>&1 && f
 q "SELECT 1 AS ok" >/dev/null 2>&1 && pass "…and the live database is still intact afterwards" || flunk "live database damaged by a refused restore"
 
 echo "# --- update.sh version and integrity rules"
-mkdir -p "$TMPBASE/newsrc/server"; printf '{ "version": "0.7.1" }\n' > "$TMPBASE/newsrc/manifest.json"
+CURV="$(source_version "$REPO")"; NEXTV="9.9.9"   # whatever version this checkout is, a newer release is one that outranks it
+mkdir -p "$TMPBASE/newsrc/server"; printf '{ "version": "9.9.9" }\n' > "$TMPBASE/newsrc/manifest.json"
 out="$(bash "$REPO/scripts/update.sh" --from-dir "$TMPBASE/newsrc" --dry-run --yes 2>&1)"; code=$?
-[ "$code" = "0" ] && contains "$out" "Installed version: 0.7.0" && contains "$out" "Target version:    0.7.1" && pass "update dry run: 0.7.0 -> 0.7.1 plan" || flunk "update plan" "code=$code $out"
+[ "$code" = "0" ] && contains "$out" "Installed version: ${CURV}" && contains "$out" "Target version:    ${NEXTV}" && pass "update dry run: ${CURV} -> ${NEXTV} plan" || flunk "update plan" "code=$code $out"
 contains "$out" "Would take a verified backup" && pass "update plan: a backup comes before anything else" || flunk "update backup step"
 mkdir -p "$TMPBASE/oldsrc/server"; printf '{ "version": "0.6.0" }\n' > "$TMPBASE/oldsrc/manifest.json"
 out="$(bash "$REPO/scripts/update.sh" --from-dir "$TMPBASE/oldsrc" --dry-run --yes 2>&1)"; [ $? -ne 0 ] && contains "$out" "older than the installed" && pass "a downgrade is refused" || flunk "downgrade refusal"

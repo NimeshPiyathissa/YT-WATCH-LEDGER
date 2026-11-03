@@ -37,6 +37,20 @@ The pairing lockout is held in memory: restarting the server clears it. The per-
 
 **Health** (sidebar → System) shows how the server is doing: uptime, version, CPU, memory, disk, database connection and speed, devices online, sync errors and waiting uploads, and the age of the newest backup. It refreshes every 15 seconds. Each problem (disk nearly full, no recent backup, a database that does not answer, a device reporting a sync error) shows what to do about it. Only the signed-in owner can read it (`GET /api/system/health`); it reveals no file path, address or secret. The public `/api/health` stays a bare `{ "ok": true }` for load balancers.
 
+## Device Control Center (v0.8)
+
+Open a device (**Devices → Diagnostics & controls**). The **Device Control Center** panel has three tabs:
+
+- **Diagnostics:** plain-language checks for authorisation, connection, upload freshness, the device's upload queue, errors it reported, clock difference, extension version and settings. Each problem says what to do. It re-runs every 15 seconds while open. Recent errors reported by the device are listed (the device's own message, never a credential).
+- **Activity:** newest first, merged from what you did (approve, revoke, rename, settings, commands), what the device reported (live viewing turned on or off, sync problems) and pairing events. Times are Sri Lanka time. `GET /api/devices/:id/activity`.
+- **Permissions:** who controls what. **Live viewing, tracking and the level of detail are the device user's choices**: this page shows them as reported and has no control that changes them. The settings you can change (history length, sync interval) and the commands you can send are listed with what each means. See [LIVE_MONITORING.md](LIVE_MONITORING.md).
+
+Destructive actions (reject, revoke, delete a device and its data, delete history on a device) open a confirmation dialog that says exactly what will happen and what will not be affected.
+
+## Timeline (Video Details, v0.8)
+
+The Activity timeline has an **overview ribbon** (one row per viewing, stretched over its own length; markers are events, shaded spans are pauses; click or press Enter on a marker to jump to it), **quick filters** (play and pause, seeks, buffering, tab and speed, viewing start and end) and **viewing boundary rows** between viewings. Events are always held in one order (time, then viewing, then sequence) and an event delivered twice appears once. Live status appears only for a device that allowed live viewing; otherwise the page says **LIVE VIEW OFF**.
+
 ## The Devices page
 
 **Overview strip.** Devices online now, total devices, active sessions, and session-deletion requests waiting for you. The sidebar badge counts devices awaiting approval plus requests awaiting a decision.

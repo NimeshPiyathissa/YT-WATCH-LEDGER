@@ -94,8 +94,17 @@ strong_password() {
   PW_REASON=""; return 0
 }
 PW_REASON=""
-# version_ge A B: true when A >= B (dotted numeric versions, a leading v is ignored)
-version_ge() { local a="${1#v}" b="${2#v}"; [ "$(printf '%s\n%s\n' "$b" "$a" | sort -V | head -n1)" = "$b" ]; }
+# version_ge A B: true when A >= B. Dotted numeric versions, a leading v is ignored, and semver pre-releases are understood:
+# 0.8.0-beta.1 < 0.8.0-rc.1 < 0.8.0 (a release outranks every pre-release of the same number).
+_ver_core() { local v="${1#v}"; printf '%s' "${v%%-*}"; }
+_ver_pre() { local v="${1#v}"; case "$v" in *-*) printf '%s' "${v#*-}";; esac; }
+version_ge() {
+  local ca cb pa pb; ca="$(_ver_core "$1")"; cb="$(_ver_core "$2")"; pa="$(_ver_pre "$1")"; pb="$(_ver_pre "$2")"
+  if [ "$ca" != "$cb" ]; then [ "$(printf '%s\n%s\n' "$cb" "$ca" | sort -V | head -n1)" = "$cb" ]; return; fi
+  [ -z "$pa" ] && return 0
+  [ -z "$pb" ] && return 1
+  [ "$(printf '%s\n%s\n' "$pb" "$pa" | sort -V | head -n1)" = "$pb" ]
+}
 valid_semver() { [[ "${1#v}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; }
 
 # ---------- secrets ----------
@@ -149,8 +158,10 @@ env_set_if_missing() { grep -q "^${1}=" "$WL_ENV_FILE" 2>/dev/null || printf '%s
 env_port() { local p; p="$(env_get PORT)"; printf '%s' "${p:-$WL_PORT_DEFAULT}"; }
 
 # ---------- release helpers ----------
-installed_version() { local f="${WL_PREFIX}/current/manifest.json"; [ -f "$f" ] && sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$f" | head -n1; }
-source_version() { local f="$1/manifest.json"; [ -f "$f" ] && sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$f" | head -n1; }
+# The release name is manifest.json's "version_name" when it has one (0.8.0-beta.1; Chrome itself only allows numbers in "version"), else "version".
+manifest_version_of() { local f="$1" v; [ -f "$f" ] || return 0; v="$(sed -n 's/.*"version_name": *"\([^"]*\)".*/\1/p' "$f" | head -n1)"; [ -n "$v" ] || v="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$f" | head -n1)"; printf '%s' "$v"; }
+installed_version() { manifest_version_of "${WL_PREFIX}/current/manifest.json"; }
+source_version() { manifest_version_of "$1/manifest.json"; }
 latest_extension_zip() { local f; f="$(ls -1t "${WL_VAR}/extension"/yt-watch-tracker-v*.zip 2>/dev/null | head -n1 || true)"; printf '%s' "$f"; }
 sha256_of() { if have sha256sum; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 

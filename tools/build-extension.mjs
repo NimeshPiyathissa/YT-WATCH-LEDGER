@@ -144,11 +144,11 @@ export function build(argv = process.argv.slice(2)) {
   scan(stage);
 
   const entries = [...walkDir(stage)].sort().map(name => ({ name, data: fs.readFileSync(path.join(stage, name)) }));
-  const zipName = `yt-watch-tracker-v${manifest.version}.zip`, zipPath = path.join(outDir, zipName), buf = zip(entries);
+  const zipName = `yt-watch-tracker-v${manifest.version_name || manifest.version}.zip`, zipPath = path.join(outDir, zipName), buf = zip(entries);
   fs.writeFileSync(zipPath, buf);
   const sha = crypto.createHash("sha256").update(buf).digest("hex");
   fs.writeFileSync(zipPath + ".sha256", `${sha}  ${zipName}\n`);
-  return { version: manifest.version, stage, zipPath, sha256: sha, files: entries.map(e => e.name), bytes: buf.length, refs, skipped, extensionId: id, server: o.server ? serverOrigin(o.server) : null };
+  return { version: manifest.version_name || manifest.version, stage, zipPath, sha256: sha, files: entries.map(e => e.name), bytes: buf.length, refs, skipped, extensionId: id, server: o.server ? serverOrigin(o.server) : null };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
