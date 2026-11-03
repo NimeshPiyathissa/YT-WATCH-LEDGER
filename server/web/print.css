@@ -1,0 +1,10 @@
+/* Print-ready video report (served by GET /api/video/:id/export?format=print). Light, high-contrast, paginated. */
+:root { color-scheme: light; }
+body { font: 13px/1.5 system-ui, "Segoe UI", Arial, sans-serif; color: #0f172a; margin: 24px auto; max-width: 960px; padding: 0 16px; }
+h1 { font-size: 22px; margin: 8px 0 2px; } h2 { font-size: 15px; margin: 22px 0 6px; padding-bottom: 4px; border-bottom: 2px solid #0e7490; }
+.muted { color: #475569; margin: 2px 0 6px; }
+table { width: 100%; border-collapse: collapse; margin: 6px 0; } th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+th { background: #f1f5f9; font-weight: 600; } thead { display: table-header-group; } tr { break-inside: avoid; }
+table.kv td:first-child { width: 40%; color: #475569; }
+#printBtn { float: right; padding: 8px 14px; border: 1px solid #0e7490; background: #0e7490; color: #fff; border-radius: 8px; font: inherit; cursor: pointer; }
+@media print { .noprint { display: none; } body { margin: 0; max-width: none; } }

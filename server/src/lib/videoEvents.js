@@ -49,9 +49,9 @@ export function recomputeSession(db, deviceId, sessionId, skew = null) {
   db.prepare("DELETE FROM video_pause_intervals WHERE device_id=? AND session_id=?").run(deviceId, sessionId);
   const ins = db.prepare("INSERT INTO video_pause_intervals(device_id,session_id,n,video_id,paused_at,resumed_at,status,duration_ms,enc) VALUES(?,?,?,?,?,?,?,?,?)");
   for (const p of f.pauses) ins.run(deviceId, sessionId, p.n, videoId, adj(p.pausedAt), adj(p.resumedAt), p.status, p.durationMs,
-    encryptJSON({ pausedPos: p.pausedPos, resumedPos: p.resumedPos, minDurationMs: p.minDurationMs }));
+    encryptJSON({ pausedPos: p.pausedPos, resumedPos: p.resumedPos, minDurationMs: p.minDurationMs, pausedEventId: p.pausedEventId, resumedEventId: p.resumedEventId }));
   db.prepare("INSERT INTO video_watch_segments(device_id,session_id,video_id,enc) VALUES(?,?,?,?) ON CONFLICT(device_id,session_id) DO UPDATE SET enc=excluded.enc,video_id=excluded.video_id")
-    .run(deviceId, sessionId, videoId, encryptJSON({ segments: f.segments }));
+    .run(deviceId, sessionId, videoId, encryptJSON({ segments: f.segments, runs: f.runs }));
   return { folded: f, skewMs, videoId };
 }
 
