@@ -54,6 +54,13 @@ export async function enrollDevice(app, ownerCookie, label = "Test device", { ap
   return { deviceId: j.deviceId, sessionId: j.sessionId, refresh: j.refreshToken, auth, confirmCode: j.confirmCode, code };
 }
 
+// The person at the device switches "live viewing" on in the extension, which then reports it with its next upload.
+// This does exactly that over the real route, so a test never edits the database to pretend it happened.
+export async function allowLiveView(app, dev, on = true) {
+  const r = await app.inject({ method: "POST", url: "/api/sync/push", headers: dev.auth, payload: { sessions: [], consents: { liveView: on } } });
+  if (r.statusCode !== 200) throw new Error("could not report the live view consent: " + r.statusCode);
+}
+
 export const session = (id, video, over = {}) => ({
   sessionId: id, videoId: video, title: "Title " + video, channel: "Chan", startTs: 1000, endTs: 5000,
   watchedMs: 60000, duration: 600, rev: 1, updatedAt: 10, ...over

@@ -15,12 +15,14 @@ export function openDb(file = ":memory:") {
 }
 
 // Applies any unapplied migrations/*.sql in filename order; returns the names applied.
-export function migrate(db) {
+// opts.upTo (a file name) stops after that migration: the tests use it to build a database exactly as an older release left it.
+export function migrate(db, opts = {}) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)");
   const done = new Set(db.prepare("SELECT name FROM schema_migrations").all().map(r => r.name));
   const applied = [];
   for (const f of fs.readdirSync(MIGRATIONS).filter(f => f.endsWith(".sql")).sort()) {
     if (done.has(f)) continue;
+    if (opts.upTo && f > opts.upTo) break;
     const sql = fs.readFileSync(path.join(MIGRATIONS, f), "utf8");
     db.transaction(() => {
       db.exec(sql);

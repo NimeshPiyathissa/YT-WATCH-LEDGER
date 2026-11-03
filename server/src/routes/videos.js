@@ -42,7 +42,7 @@ export default async function (app, { db }) {
   function scope(req, reply) {
     const videoId = req.params.videoId;
     if (!VID.test(videoId)) { reply.code(404).send({ error: "not_found" }); return null; }
-    const devices = db.prepare("SELECT id,label,status,platform,last_seen,last_events_at,clock_skew_ms,client_version FROM devices WHERE admin_id=? ORDER BY enrolled_at").all(req.admin.id);
+    const devices = db.prepare("SELECT id,label,status,platform,last_seen,last_events_at,clock_skew_ms,client_version,live_view FROM devices WHERE admin_id=? ORDER BY enrolled_at").all(req.admin.id);
     const f = filters(req.query);
     let ids = devices.map(d => d.id);
     if (f.device) { if (!ids.includes(f.device)) { reply.code(404).send({ error: "not_found" }); return null; } ids = [f.device]; }
@@ -104,10 +104,12 @@ export default async function (app, { db }) {
     const now = Date.now(), per = [];
     for (const d of sc.devices.filter(x => sc.ids.includes(x.id))) {
       const online = app.hub.isOnline(d.id);
+      // Current state is shown only for a device whose user has allowed live viewing; otherwise nothing about what it is doing right now.
+      if (!d.live_view) { per.push({ deviceId: d.id, label: d.label || "Device", online, liveView: false, lastSeen: d.last_seen, lastEventsAt: d.last_events_at, session: null }); continue; }
       const r = db.prepare("SELECT * FROM video_sessions WHERE device_id=? AND video_id=? ORDER BY last_event_at DESC LIMIT 1").get(d.id, sc.videoId);
-      if (!r) { per.push({ deviceId: d.id, label: d.label || "Device", online, lastSeen: d.last_seen, session: null }); continue; }
+      if (!r) { per.push({ deviceId: d.id, label: d.label || "Device", online, liveView: true, lastSeen: d.last_seen, session: null }); continue; }
       const m = shift(decryptJSON(r.enc), r.skew_ms);
-      per.push({ deviceId: d.id, label: d.label || "Device", online, lastSeen: d.last_seen, lastEventsAt: d.last_events_at,
+      per.push({ deviceId: d.id, label: d.label || "Device", online, liveView: true, lastSeen: d.last_seen, lastEventsAt: d.last_events_at,
         session: { sessionId: r.session_id, status: m.status, state: m.state, since: m.since, pos: m.lastPos, rate: m.rate, lastEventAt: m.lastEventAt,
           activeMs: m.activeMs, pausedMs: m.pausedMs, elapsedMs: m.elapsedMs, completed: m.completed, startedAt: m.startedAt, endedAt: m.endedAt, interruptedAt: m.interruptedAt } });
     }
@@ -178,7 +180,7 @@ export default async function (app, { db }) {
         position, positionPct: dur > 0 ? Math.min(100, Math.round(position / dur * 100)) : null, furthestSec: sum.furthestSec, progressPct: dur > 0 ? Math.min(100, Math.round(sum.furthestSec / dur * 100)) : null,
         uniqueContentSec: sum.uniqueContentSec, uniqueContentPct: sum.uniqueContentPct, rewatchSec: sum.rewatchSec, rewatchMs: sum.rewatchMs, uncertain: sum.uncertain
       },
-      devices: sc.devices.filter(d => sc.ids.includes(d.id)).map(d => ({ id: d.id, label: d.label || "Device", platform: d.platform, status: d.status, online: app.hub.isOnline(d.id), lastSeen: d.last_seen, lastEventsAt: d.last_events_at, clientVersion: d.client_version })),
+      devices: sc.devices.filter(d => sc.ids.includes(d.id)).map(d => ({ id: d.id, label: d.label || "Device", platform: d.platform, status: d.status, online: app.hub.isOnline(d.id), lastSeen: d.last_seen, lastEventsAt: d.last_events_at, clientVersion: d.client_version, liveView: !!d.live_view })),
       live: liveOf(sc), serverNow: Date.now()
     };
   });

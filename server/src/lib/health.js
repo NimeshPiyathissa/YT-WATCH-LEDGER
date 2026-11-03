@@ -43,6 +43,7 @@ export function evaluate(h) {
   if (h.memory.totalBytes && h.memory.freeBytes / h.memory.totalBytes < 0.08) w.push({ level: "warn", code: "memory_low", message: "Less than 8% of memory is free." });
   if (h.backups.status === "none") w.push({ level: "warn", code: "backup_none", message: "No backup exists yet. Make one on the Data & backups page." });
   else if (h.backups.status === "stale") w.push({ level: "warn", code: "backup_stale", message: "The newest backup is older than expected. Check the server log for 'BACKUP FAILED'." });
+  if (h.sync.queueDropped > 0) w.push({ level: "warn", code: "queue_overflow", message: h.sync.queueDropped + " playback event(s) were not queued by a device that stayed offline too long. They remain on that device." });
   if (h.sync.devicesWithErrors > 0) w.push({ level: "warn", code: "sync_errors", message: h.sync.devicesWithErrors + " device(s) reported a sync error." });
   return w;
 }
@@ -57,7 +58,7 @@ export function collectHealth({ db, config = {}, hub = null, version = "unknown"
     database = { ok: true, latencyMs: Math.round(ms * 100) / 100, sizeBytes: pages };
   } catch { /* reported as not ok */ }
 
-  const devs = db.prepare("SELECT id,status,last_push_at,pending_count,last_error FROM devices").all();
+  const devs = db.prepare("SELECT id,status,last_push_at,pending_count,last_error,queue_dropped FROM devices").all();
   const active = devs.filter(d => d.status === "active");
   const pushes = active.map(d => d.last_push_at).filter(Boolean);
   const bk = (() => { try { return listBackups(config.backupDir); } catch { return []; } })();
@@ -75,7 +76,7 @@ export function collectHealth({ db, config = {}, hub = null, version = "unknown"
     database,
     devices: { total: devs.length, active: active.length, pending: devs.filter(d => d.status === "pending").length, revoked: devs.filter(d => d.status === "revoked").length, online: hub ? active.filter(d => hub.isOnline(d.id)).length : 0 },
     sync: {
-      devicesWithErrors: active.filter(d => d.last_error).length, pendingUploads: active.reduce((a, d) => a + (d.pending_count || 0), 0),
+      devicesWithErrors: active.filter(d => d.last_error).length, queueDropped: active.reduce((a, d) => a + (d.queue_dropped || 0), 0), pendingUploads: active.reduce((a, d) => a + (d.pending_count || 0), 0),
       lastPushAt: pushes.length ? Math.max(...pushes) : null, oldestLastPushAt: pushes.length ? Math.min(...pushes) : null
     },
     backups,

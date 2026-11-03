@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { makeApp, addOwner, login, enrollDevice, session } from "./helpers.js";
+import { makeApp, addOwner, login, enrollDevice, session, allowLiveView } from "./helpers.js";
 import { summarize, dayKey, weekKey, monthKey } from "../src/lib/aggregate.js";
 
 const require = createRequire(import.meta.url);
@@ -99,6 +99,7 @@ test("history export keeps the UTC columns and adds Sri Lanka columns", async ()
 
 test("live timeline: a pushed event reaches the dashboard with its UTC instant, and the page formats it in SLST at once", async () => {
   const { app, db, dev, send } = await setup();
+  await allowLiveView(app, dev);
   const admin = db.prepare("SELECT admin_id FROM devices WHERE id=?").get(dev.deviceId).admin_id, got = [];
   app.hub.subscribeAdmin(admin, (type, data) => { if (type === "video_event") got.push(data); });
   const t = Date.UTC(2026, 10, 3, 7, 15, 2);

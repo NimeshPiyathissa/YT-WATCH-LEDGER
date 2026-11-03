@@ -3,6 +3,7 @@ import { cleanSession } from "../lib/helpers.js";
 import { purgeDevice, recomputeVideo } from "../lib/retention.js";
 import { fileDeletionRequest } from "../lib/sessions.js";
 import { measureSkew } from "../lib/videoEvents.js";
+import { recordDeviceState, recordSyncError } from "../lib/deviceState.js";
 
 const REDELIVER_AFTER_MS = 60 * 1000; // delivered-but-unacked commands are re-sent after this
 
@@ -43,6 +44,10 @@ export default async function (app, { db }) {
         typeof body.lastError === "string" && body.lastError ? body.lastError.slice(0, 300) : null,
         typeof body.clientVersion === "string" ? body.clientVersion.slice(0, 32) : null, skew, dev.id);
     })();
+    // What the device says about itself: its consent switches and queue (recorded, never set from here) and the last error it hit.
+    const st = recordDeviceState(db, dev, body, { now, ip: req.ip });
+    if (typeof body.lastError === "string" && body.lastError) recordSyncError(db, dev, body.lastError, body.lastErrorKind, now);
+    if (st.liveViewChanged) app.hub.toAdmin(dev.admin_id, "device_updated", { deviceId: dev.id });
     // Per-event acknowledgement: the device removes an outbox row only when its (sessionId, rev) is listed here.
     // Re-sending an acknowledged event is harmless (idempotent upsert; a lower rev never overwrites a higher one).
     return { ok: true, upserted: sessions.length, acked: sessions.map(s => ({ sessionId: s.sessionId, rev: s.rev })), rejected, serverNow: now, skewMs: skew };

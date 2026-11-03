@@ -17,6 +17,7 @@
     memory_low: "Check what else runs on this machine (free -m). A 1 GB server is enough for Watch Ledger alone.",
     backup_none: "Open Data & backups and press Back up now, then copy a backup off the server.",
     backup_stale: "Look for BACKUP FAILED in journalctl -u watch-ledger, and check that the disk is not full.",
+    queue_overflow: "Open Devices, choose the device, and read its diagnostics. Reconnecting it clears the queue; the events are still on that device.",
     sync_errors: "Open Devices and look at the device marked with an error; the extension's Device info page shows the same message."
   };
   // A ring that fills to pct (0 to 100); the warn / bad colour comes from thresholds on what is USED.

@@ -6,7 +6,7 @@ import { evaluate, createCpuSampler } from "../src/lib/health.js";
 const GB = 1024 ** 3;
 const base = () => ({
   database: { ok: true }, disk: { totalBytes: 100 * GB, freeBytes: 50 * GB }, memory: { totalBytes: 8 * GB, freeBytes: 4 * GB },
-  backups: { status: "ok" }, sync: { devicesWithErrors: 0 }
+  backups: { status: "ok" }, sync: { devicesWithErrors: 0, queueDropped: 0 }
 });
 
 test("a healthy server has no warnings", () => assert.deepEqual(evaluate(base()), []));
@@ -21,6 +21,7 @@ test("each threshold raises exactly its own warning with the right level", () =>
   assert.deepEqual(w(h => { h.backups.status = "none"; }).map(x => x.code), ["backup_none"]);
   assert.deepEqual(w(h => { h.backups.status = "stale"; }).map(x => x.code), ["backup_stale"]);
   assert.deepEqual(w(h => { h.sync.devicesWithErrors = 2; }).map(x => x.code), ["sync_errors"]);
+  assert.deepEqual(w(h => { h.sync.queueDropped = 9; }).map(x => x.code), ["queue_overflow"]);
   assert.deepEqual(w(h => { h.disk = null; }), [], "a disk that cannot be read is not reported as full");
 });
 
