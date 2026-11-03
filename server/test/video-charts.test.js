@@ -90,3 +90,13 @@ test("text from recorded data is escaped in chart output", () => {
   const html = C.sessionsComparison([{ startedAt: T0, activeMs: 1000, pausedMs: 0, bufferingMs: 0 }], "<img src=x onerror=alert(1)>");
   assert.equal(html.includes("<img"), false);
 });
+
+test("the page's assets obey the CSP (no inline style, script or handler) and are wired into the dashboard", () => {
+  const html = fs.readFileSync(path.join(WEB, "index.html"), "utf8");
+  for (const f of ["video.css", "vendor/playback.js", "video-charts.js", "video.js"]) assert.ok(html.includes(f), f + " is referenced by index.html");
+  assert.ok(html.indexOf("video.js") < html.indexOf("app.js"), "video.js is loaded before app.js (it reads window.WL lazily)");
+  for (const f of ["video.js", "video-charts.js"]) {
+    const src = fs.readFileSync(path.join(WEB, f), "utf8");
+    assert.equal(/\sstyle="|\sstyle=\\"|onclick=|onerror=|onload=|javascript:|eval\(|new Function|document\.write/.test(src), false, f);
+  }
+});

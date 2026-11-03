@@ -5,7 +5,7 @@
    locally between events. Nothing is extrapolated for a device that is offline. */
 (function () {
   "use strict";
-  const WL = window.WL, P = window.YTPlayback, U = window.YTUtil, CH = window.WLVideoCharts, esc = U.escapeHtml, ic = window.YTIcons.icon;
+  const WL = new Proxy({}, { get: (_t, k) => window.WL[k] }), P = window.YTPlayback, U = window.YTUtil, CH = window.WLVideoCharts, esc = U.escapeHtml, ic = window.YTIcons.icon;
   const $ = id => document.getElementById(id);
   const TZ_KEY = "wl.tz", REDUCED = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const TL_STEP = 300, EVENT_LIMIT = 2000;
