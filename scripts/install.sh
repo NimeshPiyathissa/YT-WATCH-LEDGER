@@ -18,7 +18,7 @@ SRC_DIR="${WL_SOURCE_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 . "$SCRIPT_DIR/lib/common.sh"
 
 DOMAIN="${WL_DOMAIN:-}"; ADMIN_EMAIL="${WL_ADMIN_EMAIL:-}"; ADMIN_PASSWORD="${WL_ADMIN_PASSWORD:-}"; LE_EMAIL="${WL_LE_EMAIL:-}"
-SKIP_SSL=0; SKIP_FIREWALL=0; STAGING_CERT=0; AGREE_TOS=0; RESUME=0; FORCE_OS=0; NODE_MAJOR="${WL_NODE_MAJOR:-22}"
+APP_PORT="${WL_PORT:-}"; SKIP_SSL=0; SKIP_FIREWALL=0; STAGING_CERT=0; AGREE_TOS=0; RESUME=0; FORCE_OS=0; NODE_MAJOR="${WL_NODE_MAJOR:-22}"
 CURRENT_STEP="start"; EXIT_DNS_PENDING=3
 LOG_FILE="${WL_ROOT}/var/log/watch-ledger-install.log"
 
@@ -26,6 +26,7 @@ usage() { sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; cat <<'EOF'
 
 Options:
   --domain NAME            the domain or subdomain, e.g. tracker.example.com
+  --port N                 local port the app listens on (127.0.0.1 only; default 8787; ignored if a configuration already exists)
   --letsencrypt-email MAIL address Let's Encrypt uses for expiry notices
   --agree-tos              accept the Let's Encrypt Subscriber Agreement (required with --non-interactive)
   --non-interactive        never prompt; take everything from options and WL_* environment variables
@@ -46,6 +47,7 @@ parse_args() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --domain) DOMAIN="${2:-}"; shift 2;;
+      --port) APP_PORT="${2:-}"; shift 2;;
       --letsencrypt-email) LE_EMAIL="${2:-}"; shift 2;;
       --agree-tos) AGREE_TOS=1; shift;;
       --non-interactive) WL_NONINTERACTIVE=1; shift;;
@@ -128,6 +130,11 @@ step_questions() {
     ok "Administrator account: ${ADMIN_EMAIL}"
   fi
 
+  if [ -z "$APP_PORT" ] && [ ! -f "$WL_ENV_FILE" ] && [ "$WL_NONINTERACTIVE" != "1" ]; then ask "  Local application port (leave as is unless 8787 is taken):" APP_PORT "$WL_PORT_DEFAULT"; fi
+  if [ -n "$APP_PORT" ]; then
+    case "$APP_PORT" in *[!0-9]*|"") die "The port must be a number.";; esac
+    { [ "$APP_PORT" -ge 1024 ] && [ "$APP_PORT" -le 65535 ]; } || die "The port must be between 1024 and 65535 (80 and 443 belong to nginx)."
+  fi
   step 3 "DOMAIN SETUP"
   if [ -z "$DOMAIN" ] && [ -f "$WL_ENV_FILE" ]; then DOMAIN="$(env_get BASE_URL | sed 's#^https://##')"; [ -n "$DOMAIN" ] && info "Using the domain from the existing installation: ${DOMAIN}"; fi
   say "  Enter the domain or subdomain that will point at this server, for example: tracker.example.com"

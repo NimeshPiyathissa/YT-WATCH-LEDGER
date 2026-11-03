@@ -73,8 +73,8 @@ You need an Ubuntu 22.04 / 24.04 VPS, a domain pointing at it ([beginner guide](
 ```bash
 git clone https://github.com/NimeshPiyathissa/YT-WATCH-LEDGER.git
 cd YT-WATCH-LEDGER
-sudo ./scripts/install.sh --dry-run     # preview; changes nothing
-sudo ./scripts/install.sh               # the 8-step wizard
+sudo bash install.sh --dry-run     # preview; changes nothing
+sudo bash install.sh               # the 8-step wizard
 ```
 
 The wizard asks for your admin email and a strong password, then your domain; it generates the encryption keys, installs Node.js, a hardened `systemd` service and nginx, obtains and auto-renews a Let's Encrypt certificate, and builds an extension already pointing at your server. It is safe to re-run and `--resume`-able; it never regenerates an existing key or overwrites a database.
@@ -84,6 +84,17 @@ Then: open `https://your.domain`, [install the extension](docs/EXTENSION_SETUP.m
 Want to try it first on your own computer? See the [local demo](docs/DEMO.md).
 
 > **Honest status.** The installer's logic is covered by a 102-check automated sandbox suite, and its steps that need a real machine (`apt`, `systemd`, `nginx`, `certbot`, `ufw`) are shell-checked and dry-run planned but have **not yet been run on a real VPS by the author**. Treat v0.7.0 as a pre-release and use `--dry-run` first. Details: [VPS deployment](docs/VPS_DEPLOYMENT.md#deploy-on-an-ubuntu-vps-guided-installer).
+
+## Technology stack and requirements
+
+| Layer | Technology |
+|---|---|
+| Extension | Chrome Manifest V3, vanilla JavaScript, IndexedDB event outbox (Chrome 116+) |
+| Server | Node.js 22, Fastify 5, better-sqlite3 (SQLite), argon2, WebSocket and Server-Sent Events |
+| Dashboard | Dependency-free JavaScript, inline SVG charts, no CDN |
+| Deployment | nginx, Let's Encrypt (certbot), systemd, ufw |
+
+**Server requirements:** Ubuntu 22.04 or 24.04 LTS, 1 vCPU, about 1 GB RAM and 5 GB disk, a public IPv4 address, ports 80/443 reachable, a domain or subdomain. One subdomain is all the application needs: the dashboard, API and extension all use the same address (no separate `dashboard.` / `api.` hosts; see [DOMAIN_SETUP.md](docs/DOMAIN_SETUP.md)). **Browser:** Chrome 116+ (or a Chromium browser that loads unpacked extensions).
 
 ## The Chrome extension
 
@@ -126,6 +137,16 @@ Details: [Backup & recovery](docs/BACKUP_RECOVERY.md), [Operations](docs/OPERATI
 
 A cinematic 16:9 (75 s) and a vertical 9:16 (56 s) overview are attached to the [GitHub release](https://github.com/NimeshPiyathissa/YT-WATCH-LEDGER/releases/tag/v0.7.0) as `watch-ledger-cinematic-16x9.mp4` and `watch-ledger-social-9x16.mp4`. They use the real interface with fictional demo data.
 
+## Troubleshooting
+
+| Symptom | First step |
+|---|---|
+| Installer says the domain does not resolve | [DOMAIN_SETUP.md](docs/DOMAIN_SETUP.md), then `sudo bash install.sh --resume` |
+| Dashboard shows `bad_origin` | open it at exactly the configured `https://your.domain` |
+| Service will not start | `journalctl -u watch-ledger -n 80 --no-pager` |
+| Extension will not pair | check the code is unexpired (15 min) and the address is HTTPS; [DEVICE_PAIRING.md](docs/DEVICE_PAIRING.md) |
+| Anything else | `./scripts/health-check.sh`, [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md), [PRODUCTION_GUIDE.md](docs/PRODUCTION_GUIDE.md) |
+
 ## Documentation
 
 | Topic | Guide |
@@ -137,6 +158,7 @@ A cinematic 16:9 (75 s) and a vertical 9:16 (56 s) overview are attached to the 
 | Chrome extension | [EXTENSION_SETUP.md](docs/EXTENSION_SETUP.md), [INSTALL.md](docs/INSTALL.md), [EXTENSION.md](docs/EXTENSION.md) |
 | Pairing a browser | [DEVICE_PAIRING.md](docs/DEVICE_PAIRING.md) |
 | Backups, restore, updates | [BACKUP_RECOVERY.md](docs/BACKUP_RECOVERY.md) |
+| Day-two operations (update, change domain or admin password, logs, outages, uninstall) | [PRODUCTION_GUIDE.md](docs/PRODUCTION_GUIDE.md) |
 | Manual (non-installer) deployment | [DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 | Admin dashboard | [ADMIN_DASHBOARD.md](docs/ADMIN_DASHBOARD.md) |
 | Video Details | [VIDEO_DETAILS.md](docs/VIDEO_DETAILS.md) |
@@ -155,12 +177,31 @@ cd server && npm ci && npm test                  # server, end-to-end, installer
 node scripts/check-links.mjs                     # documentation links
 ```
 
+## Development
+
+```bash
+git clone https://github.com/NimeshPiyathissa/YT-WATCH-LEDGER.git && cd YT-WATCH-LEDGER
+cd server && npm ci && cp .env.example .env     # fill in two generated secrets; see the comments in the file
+node --env-file=.env src/server.js              # local server (dev: BASE_URL=http://localhost:PORT, NODE_ENV not production)
+```
+Load the repository root as an unpacked extension for development. Shared pure modules are copied into the server by `node server/scripts/sync-shared.js`. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Roadmap
+
+Ideas, not promises: a real-VPS validation pass of the installer; a Chrome Web Store listing; a CI-built release pipeline; per-device export; removing the `resume_tracking` override (see below). Track or propose items in the repository's issues.
+
 ## Limitations
+
+- **`resume_tracking` privacy limitation:** the owner can remotely turn tracking back on after the person at the device paused it. It is visible on the device and audited, but it conflicts with user-controlled consent; it was kept by the owner's decision and can be removed ([KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)).
 
 - Player events cannot prove a human was watching; "active" means the player was in a playing, non-ad state.
 - The extension can always be paused or removed at `chrome://extensions`; the server then shows the device as offline until you revoke it.
 - Developer-mode install only; there is no Chrome Web Store listing and no approval is claimed.
 - See [KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) for the full list.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md). v0.7.0 is the first public release.
 
 ## License and credits
 

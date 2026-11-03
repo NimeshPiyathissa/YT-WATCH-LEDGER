@@ -9,6 +9,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 - **Event-driven playback capture** in the extension (pause, resume, seek, buffering, completion, tab switch, viewing end), with an IndexedDB event outbox, crash recovery and exactly-once upload. A *Collect watch detail* switch turns detail off.
 - **Server:** playback-event ingest, migration `006`, derived analytics tables, read APIs, live state over SSE.
 - **Guided VPS installer** (`scripts/install.sh`): Ubuntu 22.04/24.04, interactive, resumable, with DNS verification, nginx, Let's Encrypt, `systemd`, `ufw`, a strong-password policy and generated keys. Plus `update.sh` (backup first, automatic code rollback), `backup.sh`, `restore.sh` and `health-check.sh`.
+- Root `install.sh` entry point (`sudo bash install.sh`), `--port` option, and a production operations guide (`docs/PRODUCTION_GUIDE.md`).
+- GitHub Actions CI (`.github/workflows/ci.yml`): tests, syntax and shell lint, link check, dependency audit, extension build and ZIP validation. Read-only permissions; publishes nothing.
 - `scripts/smoke-test.mjs` (HTTP smoke test for a deployed server), `scripts/check-links.mjs` (documentation link checker).
 - Documentation: installation, VPS deployment, domain, SSL, extension setup, device pairing, backup and recovery.
 - MIT licence, third-party notices, contributing guide.

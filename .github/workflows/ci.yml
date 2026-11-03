@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [master, "release/**"]
+  pull_request:
+
+# least privilege: the workflows only read the repository and never publish anything
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install server dependencies
+        run: npm ci
+        working-directory: server
+      - name: Syntax check
+        run: |
+          find . -name node_modules -prune -o \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
+          for f in install.sh scripts/*.sh scripts/lib/*.sh; do bash -n "$f"; done
+      - name: Extension tests
+        run: for f in tests/*.test.js; do node "$f"; done
+      - name: Server, end-to-end and installer tests
+        run: npm test
+        working-directory: server
+      - name: Shell lint
+        run: shellcheck -S warning -e SC2034,SC1091 install.sh scripts/*.sh scripts/lib/*.sh
+      - name: Documentation links
+        run: node scripts/check-links.mjs
+      - name: Dependency audit (production, high and above)
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: server
+      - name: Build the extension and validate the ZIP
+        run: |
+          node tools/build-extension.mjs --out "$RUNNER_TEMP/ext"
+          zip=$(ls "$RUNNER_TEMP"/ext/*.zip)
+          unzip -tq "$zip"
+          unzip -p "$zip" manifest.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const m=JSON.parse(s);if(m.manifest_version!==3)process.exit(1);console.log("manifest v3, version",m.version)})'
+          ! unzip -l "$zip" | grep -Ei '\.env|\.db|\.pem|node_modules|/server/'

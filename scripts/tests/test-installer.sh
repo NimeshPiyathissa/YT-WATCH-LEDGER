@@ -124,6 +124,8 @@ contains "$out" "Str0ng" && flunk "the password is not echoed" || pass "the wiza
 out="$(bash "$REPO/scripts/install.sh" --admin-password hunter2 2>&1)"; [ $? -ne 0 ] && contains "$out" "never accepted as arguments" && pass "a password on the command line is refused" || flunk "password argument"
 out="$(WL_ROOT="$TMPBASE/fresh" WL_ADMIN_PASSWORD=short bash "$REPO/scripts/install.sh" --dry-run --non-interactive --domain tracker.example.com --agree-tos 2>&1)"; [ $? -ne 0 ] && contains "$out" "too weak" && pass "a weak password stops the wizard" || flunk "weak password" "$(printf '%s' "$out" | tail -4)"
 out="$(bash "$REPO/scripts/install.sh" --dry-run --non-interactive --domain 203.0.113.7 --agree-tos 2>&1)"; [ $? -ne 0 ] && contains "$out" "not an IP address" && pass "an IP address is refused as the domain" || flunk "IP domain"
+out="$(bash "$REPO/scripts/install.sh" --dry-run --non-interactive --domain tracker.example.com --agree-tos --port 80 2>&1)"; [ $? -ne 0 ] && contains "$out" "between 1024 and 65535" && pass "port 80 is refused" || flunk "port 80 refusal"
+out="$(bash "$REPO/scripts/install.sh" --dry-run --non-interactive --domain tracker.example.com --agree-tos --port abc 2>&1)"; [ $? -ne 0 ] && contains "$out" "must be a number" && pass "a non-numeric port is refused" || flunk "port abc refusal"
 
 echo "# --- backup, restore and update against the real database"
 export WL_USER=nobody
