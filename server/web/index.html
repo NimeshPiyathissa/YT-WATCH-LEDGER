@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="vendor/theme.css" />
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="video.css" />
+  <link rel="stylesheet" href="ui.css" />
 </head>
 <body>
   <div class="shell" id="shell" hidden>
@@ -25,11 +26,16 @@
         <span class="chip-private">private</span>
       </div>
       <nav id="nav" aria-label="Sections">
+        <span class="nav-group">Insights</span>
         <a href="#/overview" data-nav="overview"><span data-icon="layout-dashboard"></span>Overview</a>
+        <a href="#/analytics" data-nav="analytics"><span data-icon="activity"></span>Analytics</a>
         <a href="#/history" data-nav="history"><span data-icon="history"></span>History</a>
         <a href="#/videos" data-nav="videos"><span data-icon="film"></span>Videos</a>
+        <span class="nav-group">Manage</span>
         <a href="#/devices" data-nav="devices"><span data-icon="monitor-smartphone"></span>Devices <span class="badge" id="pendingBadge" hidden></span></a>
         <a href="#/data" data-nav="data"><span data-icon="database"></span>Data &amp; backups</a>
+        <span class="nav-group">System</span>
+        <a href="#/health" data-nav="health"><span data-icon="server"></span>Health</a>
         <a href="#/audit" data-nav="audit"><span data-icon="scroll-text"></span>Audit log</a>
       </nav>
       <div class="side-foot">
@@ -48,6 +54,8 @@
   <script src="vendor/playback.js"></script>
   <script src="video-charts.js"></script>
   <script src="video.js"></script>
+  <script src="analytics.js"></script>
+  <script src="health.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

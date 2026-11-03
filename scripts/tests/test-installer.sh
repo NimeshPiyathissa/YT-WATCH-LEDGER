@@ -174,7 +174,13 @@ bash "$REPO/scripts/health-check.sh" --quiet >/dev/null 2>&1; code=$?
 ( cd "$REPO/server" && exec "$WL_NODE" --env-file="$WL_ENV_FILE" src/server.js >"$TMPBASE/server.log" 2>&1 ) &
 SERVER_PID=$!
 health_wait 25 && pass "(setup) the server starts with the generated production configuration" || { flunk "server start" "$(tail -3 "$TMPBASE/server.log")"; }
-bash "$REPO/scripts/health-check.sh" --quiet >"$TMPBASE/hc.txt" 2>&1; code=$?
+# the disk check is not what this test is about, and a developer machine may genuinely be nearly full: answer it with a stub df
+DFSHIM="$TMPBASE/dfshim"; mkdir -p "$DFSHIM"; printf '#!/bin/sh
+echo "Filesystem 1024-blocks Used Available Capacity Mounted on"
+echo "stub 1000000 500000 500000 50%% /"
+' > "$DFSHIM/df"; chmod +x "$DFSHIM/df"
+if command -v cygpath >/dev/null 2>&1; then DFP="$(cygpath -u "$DFSHIM")"; else DFP="$DFSHIM"; fi
+PATH="$DFP:$PATH" bash "$REPO/scripts/health-check.sh" --quiet >"$TMPBASE/hc.txt" 2>&1; code=$?
 [ "$code" = "0" ] || [ "$code" = "1" ] && ! grep -q "NOT running\|does not answer" "$TMPBASE/hc.txt" && pass "health check: a running server passes the application check (exit $code)" || flunk "health check on a running server" "$(cat "$TMPBASE/hc.txt")"
 out="$(cd "$REPO" && WL_ADMIN_EMAIL=owner@example.com WL_ADMIN_PASSWORD='Str0ng&Secret#2026' BASE_URL=x "$WL_NODE" scripts/smoke-test.mjs --url "http://127.0.0.1:8799" --anonymous 2>&1)"
 contains "$out" "checks passed" && pass "the smoke test (anonymous) passes against the installer-configured server" || flunk "smoke test against the generated config" "$out"

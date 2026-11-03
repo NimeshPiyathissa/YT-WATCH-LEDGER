@@ -9,18 +9,21 @@
   const STALE_MS = 15 * 60 * 1000;        // an approved device that hasn't uploaded for this long shows as offline
   const PAGE = 50;
   let toastT = null, timer = null, devices = [], lastPath = null, pairing = null, cpTimer = null, evSource = null;
+  let routeGen = 0; // bumped on every navigation: a page read that finishes after the owner moved on must not draw over the new page
 
   const toast = m => { const t = $("toast"); t.textContent = m; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3200); };
 
   /* ---- API: cookie session; one silent refresh on 401, then back to sign-in ---- */
   async function refreshed() { const r = await fetch("/api/auth/refresh", { method: "POST", credentials: "same-origin" }); return r.ok; }
   async function api(method, path, body, retry) {
+    const gen = routeGen;
     const res = await fetch(path, { method, credentials: "same-origin", headers: body !== undefined ? { "Content-Type": "application/json" } : {}, body: body !== undefined ? JSON.stringify(body) : undefined });
     if (res.status === 401 && retry !== false && path.indexOf("/api/auth/") !== 0) {
       if (await refreshed()) return api(method, path, body, false);
       location.hash = "#/login"; throw new Error("unauthorized");
     }
     const data = await res.json().catch(() => ({}));
+    if (method === "GET" && gen !== routeGen) throw new Error("navigated");
     if (!res.ok) { const e = new Error(data.error || "http_" + res.status); e.status = res.status; throw e; }
     return data;
   }
@@ -34,9 +37,9 @@
   const ERR = { invalid_credentials: "Wrong email or password.", bad_label: "Use a name of 1 to 80 characters.", bad_command: "The server rejected that command.", device_not_active: "Only approved devices can receive commands.",
     forbidden: "Not allowed.", not_found: "That item no longer exists.", not_pending: "That device was already handled.", confirmation_required: "Confirmation is required.", bad_retention: "Choose 0 to 3650 days." };
   const errText = e => (e && e.status === 429) ? "Too many attempts. Wait a few minutes." : ERR[e && e.message] || "Something went wrong (" + (e && e.message) + ").";
-  const guarded = fn => async (...a) => { try { return await fn(...a); } catch (e) { if (e.message !== "unauthorized") toast(errText(e)); } };
+  const guarded = fn => async (...a) => { try { return await fn(...a); } catch (e) { if (e.message !== "unauthorized" && e.message !== "navigated") toast(errText(e)); } };
   // Page loaders show a styled error state (with a retry) instead of leaving the skeleton on screen.
-  const pageGuard = fn => async (...a) => { try { return await fn(...a); } catch (e) { if (e.message !== "unauthorized") showError(e); } };
+  const pageGuard = fn => async (...a) => { try { return await fn(...a); } catch (e) { if (e.message !== "unauthorized" && e.message !== "navigated") showError(e); } };
 
   /* ---- helpers ---- */
   const when = ts => ts ? U.fmtDateTime(ts) : "Never";
@@ -118,7 +121,8 @@
 
   /* ---- router ---- */
   function route() {
-    clearInterval(timer); timer = null; clearInterval(cpTimer); cpTimer = null; closeEvents(); window.WLVideo.dispose();
+    routeGen++;
+    clearInterval(timer); timer = null; clearInterval(cpTimer); cpTimer = null; closeEvents(); window.WLVideo.dispose(); window.WLHealth.dispose();
     const h = location.hash || "#/overview";
     const login = h === "#/login";
     $("login").hidden = !login; $("shell").hidden = login;
@@ -135,6 +139,8 @@
     const vm = h.match(/^#\/video\/([\w-]{1,32})$/);
     if (vm) return pageGuard(() => window.WLVideo.render(app, vm[1]))();
     if (h === "#/videos") return pageGuard(() => window.WLVideo.renderList(app))();
+    if (h === "#/analytics") return pageGuard(() => window.WLAnalytics.render(app))();
+    if (h === "#/health") return pageGuard(() => window.WLHealth.render(app))();
     if (h === "#/history") return pageGuard(pageHistory)();
     const dm = h.match(/^#\/devices(?:\/(requests|sessions|pairing))?$/);
     if (dm) return pageGuard(pageDevices)(dm[1]);
@@ -236,6 +242,11 @@
     const drawTrend = () => { C.barChart($("trend"), s[ov.gran], dur); app.querySelectorAll("[data-g]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.g === ov.gran))); };
     drawTrend();
     app.querySelectorAll("[data-g]").forEach(b => b.onclick = () => { ov.gran = b.dataset.g; drawTrend(); });
+    // Dashboard v2: how this period compares with the one before it (event-based analytics; skipped for "all time" and ranges the API refuses)
+    if (from) api("GET", "/api/analytics" + qs({ from, to: Date.now(), device: ov.device })).then(r => {
+      const el = app.querySelector(".stat.lead");
+      if (el && !el.querySelector(".delta")) el.insertAdjacentHTML("beforeend", `<div class="stat-delta">${window.WLAnalytics.deltaHtml(r.comparison, "period")}</div>`);
+    }).catch(() => { /* the comparison is a bonus; the page works without it */ });
     $("ovRange").onchange = () => { ov.range = $("ovRange").value; route(); };
     $("ovDev").onchange = () => { ov.device = $("ovDev").value; route(); };
   }
