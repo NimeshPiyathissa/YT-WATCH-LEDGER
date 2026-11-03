@@ -2,6 +2,24 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] - v0.8.0 development (branch `develop/v0.8.0`)
+
+### v0.8.0-alpha (this milestone)
+#### Added
+- **Analytics** page and `GET /api/analytics`: today / 7 / 30 / 90 days or a custom range, day / week / month grouping, comparison with the previous period, watch time by hour and weekday, time per device, top videos and channels. Time comes from recorded playback runs; overlapping playback on one device is counted once; days follow Sri Lanka time.
+- **Health Center** page and owner-only `GET /api/system/health`: uptime, CPU, memory, disk, database, devices online, sync errors and backup age, with explainable warnings.
+- Dashboard v2 layer (`ui.css`): grouped sidebar, KPI tiles, rings, entrance transitions (reduced-motion aware), light glass on the sidebar only.
+- Overview shows the change against the previous period.
+- `scripts/ui-check.mjs` and a test: a real headless Chrome checks every page at phone, tablet and desktop widths for drawing, error states and sideways scroll.
+- GitHub Actions: `actions/checkout@v7` and `actions/setup-node@v7`.
+
+#### Fixed
+- **Navigation race:** a slow page (for example Overview) could finish loading after the owner had moved to another page and draw over it. Page reads from an earlier page are now dropped.
+- The installer test suite no longer fails on a host whose disk is nearly full.
+
+#### Not in this milestone yet
+Device Control Center upgrades, Timeline V2 filters, real-time device monitoring, extension popup V2, sync hardening, Diagnostics, Notifications, Reports Studio, Update Manager, Security Center, Backup Manager and Settings Studio are planned for the beta and release-candidate milestones.
+
 ## [0.7.0] - 2026-11-03
 
 ### Added

@@ -23,6 +23,20 @@ The pairing lockout is held in memory: restarting the server clears it. The per-
 
 **Videos** lists every video your devices have played; open one for its live status, event timeline, every pause and resume, viewing history, charts and export. See [`VIDEO_DETAILS.md`](VIDEO_DETAILS.md). Upgrading to 0.7.0 applies migration `006` automatically at start (additive; take a backup first as usual).
 
+## Analytics (v0.8)
+
+**Analytics** (sidebar → Insights) answers "how much, when, and on what". Pick **Today, 7, 30 or 90 days**, or a **custom** range of up to 366 days, group by day, week or month (or let it choose), and filter to one device.
+
+- **Watch time** is the time a video was actually playing, taken from the recorded playback itself. Pauses, buffering and ads are not counted. A session recorded before v0.7.0 has no events, so its summary is used instead.
+- **No double counting:** if two tabs on one device play at the same time, or the same viewing is uploaded twice, that span is counted once and shared between the videos playing. Different devices add up. The page tells you how much overlap was removed.
+- **Comparison:** the change against the previous period of the same length, with the arrow and percentage. "New activity" means the previous period had no data.
+- **Also shown:** sessions, videos, active days, average per active day, longest session, watch time by hour of the day and day of the week, time per device, top channels and top videos (each opens Video Details).
+- Days, weeks (Monday to Sunday) and months follow **Sri Lanka time**; an interval that crosses midnight is split between the two days. API: `GET /api/analytics?range=7|30|90|365|today` or `?from=&to=` (milliseconds), `granularity=auto|day|week|month`, `device=<id>`.
+
+## Health Center (v0.8)
+
+**Health** (sidebar → System) shows how the server is doing: uptime, version, CPU, memory, disk, database connection and speed, devices online, sync errors and waiting uploads, and the age of the newest backup. It refreshes every 15 seconds. Each problem (disk nearly full, no recent backup, a database that does not answer, a device reporting a sync error) shows what to do about it. Only the signed-in owner can read it (`GET /api/system/health`); it reveals no file path, address or secret. The public `/api/health` stays a bare `{ "ok": true }` for load balancers.
+
 ## The Devices page
 
 **Overview strip.** Devices online now, total devices, active sessions, and session-deletion requests waiting for you. The sidebar badge counts devices awaiting approval plus requests awaiting a decision.
