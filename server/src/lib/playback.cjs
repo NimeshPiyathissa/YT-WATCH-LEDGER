@@ -15,7 +15,7 @@
     "VIDEO_BUFFERING_ENDED", "VIDEO_COMPLETED", "VIDEO_REPLAYED", "VIDEO_TAB_HIDDEN", "VIDEO_TAB_VISIBLE", "VIDEO_SESSION_ENDED",
     "VIDEO_SESSION_INTERRUPTED"];
   const STATES = ["none", "playing", "paused", "buffering", "ad", "ended"];
-  const REASONS = ["user", "ad_break", "ad_break_end", "recovered", "navigation", "pagehide", "tracking_off", "reconcile", "paused", "ended", "retention"];
+  const REASONS = ["user", "ad_break", "ad_break_end", "recovered", "navigation", "pagehide", "tracking_off", "idle", "reconcile", "paused", "ended", "retention"];
   const BUFFER_DEBOUNCE_MS = 400;   // shorter stalls are not recorded
   const SEEK_TOLERANCE_S = 1;       // a position change smaller than this after `seeked` is not a seek
   const MAX_RATE = 16, MIN_RATE = 0.0625;

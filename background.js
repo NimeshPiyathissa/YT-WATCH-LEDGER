@@ -1,7 +1,7 @@
 /* background.js — service worker. SESSION_FLUSH -> putSession -> recomputeVideo. */
-importScripts("lib/build-config.js", "lib/util.js", "lib/accounting.js", "lib/db.js", "lib/diag.js", "lib/sync.js", "lib/realtime.js");
+importScripts("lib/build-config.js", "lib/util.js", "lib/accounting.js", "lib/playback.js", "lib/db.js", "lib/diag.js", "lib/sync.js", "lib/realtime.js");
 
-const DB = self.YTDB, A = self.YTAccounting, DIAG = self.YTDiag, SYNC = self.YTSync, RT = self.YTRealtime;
+const DB = self.YTDB, A = self.YTAccounting, P = self.YTPlayback, DIAG = self.YTDiag, SYNC = self.YTSync, RT = self.YTRealtime;
 const getCfg = k => new Promise(r => chrome.storage.local.get(k, r));
 const setCfg = o => new Promise(r => chrome.storage.local.set(o, r));
 const thumb = id => "https://i.ytimg.com/vi/" + id + "/mqdefault.jpg";
@@ -19,10 +19,11 @@ chrome.runtime.onInstalled.addListener(details => {
   });
   chrome.action.setBadgeBackgroundColor({ color: "#d92d20" });
   ensureSyncAlarm();
+  recoverInterrupted().catch(() => {});
   runSync().catch(() => {}); // report the new version and reconnect straight away
 });
 // Browser restart: apply retention and resume uploading whatever is still in the outbox.
-chrome.runtime.onStartup.addListener(() => { enforceRetention().catch(() => {}); runSync().catch(() => {}); });
+chrome.runtime.onStartup.addListener(() => { enforceRetention().catch(() => {}); recoverInterrupted().catch(() => {}); runSync().catch(() => {}); });
 
 async function recomputeVideo(videoId) {
   const sessions = await DB.getSessionsByVideo(videoId);
@@ -78,7 +79,11 @@ function ensureSyncAlarm() {
 }
 chrome.alarms.onAlarm.addListener(a => {
   if (a.name === SYNC_ALARM || a.name === POLL_ALARM) runSync();
-  if (a.name === RT_ALARM) RT.connect().catch(() => {}); // brings the socket back if the worker was stopped
+  if (a.name === RT_ALARM) {
+    RT.connect().catch(() => {}); // brings the socket back if the worker was stopped
+    recoverInterrupted().catch(() => {});
+    DB.evOutboxCount().then(n => { if (n) scheduleEvents(0); }).catch(() => {}); // events still queued (offline earlier): try again
+  }
 });
 ensureSyncAlarm();
 
@@ -86,6 +91,7 @@ ensureSyncAlarm();
 RT.init(async m => {
   switch (m.type) {
     case "ready":
+      scheduleEvents(0); // back online: whatever was queued while the connection was down goes first
       if (m.deletionRequest !== undefined) await SYNC.storeRequest(m.deletionRequest);
       if (m.status === "active" && (await SYNC.cfg()).sync_status === "pending") return runSync();
       return;
@@ -103,6 +109,64 @@ RT.init(async m => {
   }
 });
 RT.connect().catch(() => {});
+
+/* ---- playback events (lib/playback.js) ---- */
+const END_TYPES = ["VIDEO_SESSION_ENDED", "VIDEO_SESSION_INTERRUPTED"];
+const URGENT_TYPES = ["VIDEO_STARTED", "VIDEO_PAUSED", "VIDEO_RESUMED", "VIDEO_SEEKED", "VIDEO_COMPLETED", "VIDEO_REPLAYED", "VIDEO_SESSION_ENDED", "VIDEO_SESSION_INTERRUPTED"];
+const STALE_MS = 3 * 60 * 1000; // a recorder whose heartbeat is older than this is gone (the content script writes one every ~5 s)
+let evT = null, evAt = 0, evSyncing = false, evAgain = false, evFail = 0;
+
+// Pause / resume / seek / completion reach the server about a second later; everything else rides the next 5-second batch.
+function scheduleEvents(ms) {
+  const at = Date.now() + ms;
+  if (evT && evAt <= at) return;
+  clearTimeout(evT); evAt = at; evT = setTimeout(runEvents, ms);
+}
+async function runEvents() {
+  evT = null; evAt = 0;
+  if (evSyncing) { evAgain = true; return; }
+  evSyncing = true;
+  try {
+    const r = await SYNC.pushEventsOnce(DB);
+    if (r.revoked) { await DIAG.warn("event sync stopped: device no longer authorised", { reason: r.kind }); await RT.stop(); }
+    else if (r.ok === false) { evFail++; scheduleEvents(SYNC.backoff(Math.min(evFail, 6))); } // offline or server error: events stay queued
+    else evFail = 0;
+  } finally { evSyncing = false; if (evAgain) { evAgain = false; scheduleEvents(200); } }
+}
+
+async function handleVideoEvents(events) {
+  const c = await getCfg({ tracking_enabled: true, collect_detail: true });
+  let list = (Array.isArray(events) ? events.slice(0, 200) : []).map(e => P.validateEvent(e)).filter(Boolean);
+  // With tracking paused or detail collection off nothing new is recorded; only the marker that closes a viewing already in
+  // progress is kept, so the owner never sees a session that looks open forever.
+  if (c.tracking_enabled === false || c.collect_detail === false) list = list.filter(e => END_TYPES.indexOf(e.type) >= 0);
+  if (!list.length) return { ok: true, stored: 0 };
+  await DB.putEvents(list, SYNC.isEnrolled(await SYNC.cfg())); // paired devices queue them in the same transaction
+  await setCfg({ last_activity: Date.now() });
+  scheduleEvents(list.some(e => URGENT_TYPES.indexOf(e.type) >= 0) ? 1000 : 5000);
+  return { ok: true, stored: list.length };
+}
+
+// A recorder that vanished without an end event (browser closed, tab crashed, power lost) is closed at its last heartbeat:
+// the recorded timestamp, never "now". Open pauses then become "unresolved" instead of getting an invented end.
+async function recoverInterrupted() {
+  const { live_rec } = await getCfg({ live_rec: null });
+  if (!live_rec || live_rec.finished || !live_rec.started || Date.now() - live_rec.lastTs < STALE_MS) return;
+  const ev = P.interruptedEvent(live_rec, live_rec.lastTs);
+  if (ev) {
+    await DB.putEvents([ev], SYNC.isEnrolled(await SYNC.cfg()));
+    scheduleEvents(0);
+    await DIAG.info("interrupted viewing recovered", { sessionId: live_rec.sessionId });
+  }
+  const s = await DB.getSession(live_rec.sessionId); // the watch-time snapshot of that viewing never got an end either
+  if (s && !s.endTs) {
+    s.endTs = Math.max(s.startTs || 0, live_rec.lastTs); s.rev = (s.rev || 0) + 1; s.updatedAt = Date.now();
+    await DB.putSession(s, SYNC.isEnrolled(await SYNC.cfg()));
+    await recomputeVideo(s.videoId);
+    scheduleSync();
+  }
+  await setCfg({ live_rec: null });
+}
 
 async function handleFlush(snap, sender) {
   const cfg = await getCfg({ tracking_enabled: true });
@@ -130,6 +194,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   switch (msg && msg.type) {
     case "SESSION_FLUSH":
       return run(handleFlush(msg.snapshot, sender).catch(async err => { await DIAG.error("flush failed", String(err)); throw err; }));
+    case "VIDEO_EVENTS": return run(handleVideoEvents(msg.events));
     case "SYNC_NOW": return run(runSync());
     case "PAIRED": return run(runSync().then(r => { RT.connect().catch(() => {}); return r; }));
     case "ENFORCE_RETENTION": return run(enforceRetention().then(n => ({ ok: true, removed: n })));

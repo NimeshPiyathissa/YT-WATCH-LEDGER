@@ -16,7 +16,7 @@ export function makeDevice({ server, name, clockSkewMs = 0, realtime = false }) 
   // State that survives a "browser restart": storage, IndexedDB and the (injectable) network conditions.
   const store = { install_id: "inst-" + name };
   const idb = new IDBFactory();
-  const net = { offline: false, loseResponses: 0, expireAccessOnce: false, log: [], mock: {} }; // mock: { "/api/path": () => Response } overrides one server answer
+  const net = { offline: false, loseResponses: 0, loseEventResponses: 0, expireAccessOnce: false, log: [], mock: {} }; // mock: { "/api/path": () => Response } overrides one server answer
   let ctx = null, onMessage = null, startups = [];
   const alarms = {};
 
@@ -58,6 +58,7 @@ export function makeDevice({ server, name, clockSkewMs = 0, realtime = false }) 
       net.log.push([p, res.status]);
       // The server processed the request but the device never sees the answer (connection dropped mid-response).
       if (net.loseResponses > 0 && p === "/api/sync/push") { net.loseResponses--; throw new TypeError("connection reset"); }
+      if (net.loseEventResponses > 0 && p === "/api/sync/events") { net.loseEventResponses--; throw new TypeError("connection reset"); }
       return res;
     };
     const sandbox = {
@@ -79,6 +80,12 @@ export function makeDevice({ server, name, clockSkewMs = 0, realtime = false }) 
     // The tracker content script's snapshot, delivered like a real SESSION_FLUSH message.
     flush: snapshot => send({ type: "SESSION_FLUSH", snapshot: { ...snapshot } }),
     sync: () => send({ type: "SYNC_NOW" }),
+    // Playback events as content/tracker.js sends them, and the fast event-only upload the service worker schedules.
+    videoEvents: events => send({ type: "VIDEO_EVENTS", events: structuredClone(events) }),
+    pushEvents: () => ctx.YTSync.pushEventsOnce(ctx.YTDB),
+    recover: () => ctx.recoverInterrupted(),
+    evOutbox: () => ctx.YTDB.evOutboxAll(),
+    localEvents: sid => ctx.YTDB.getEventsBySession(sid),
     pair: (code, opts) => ctx.YTSync.enroll(server, code, opts),
     cfg: () => ctx.YTSync.cfg(),
     connect: () => ctx.YTRealtime.connect(),

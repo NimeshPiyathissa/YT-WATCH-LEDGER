@@ -32,7 +32,7 @@ async function v2Database(sessions) {
   return idb;
 }
 
-test("upgrading an existing v2 database to v3 keeps every session and video, and starts with an empty outbox", async () => {
+test("upgrading an existing v2 database to the current version keeps every session and video, and starts with empty outboxes", async () => {
   const idb = await v2Database([
     { sessionId: "s1", videoId: "v1", startTs: 1000, watchedMs: 5000, updatedAt: 2000, rev: 4 },
     { sessionId: "s2", videoId: "v1", startTs: 3000, watchedMs: 9000, updatedAt: 4000, rev: 2 }
@@ -43,8 +43,11 @@ test("upgrading an existing v2 database to v3 keeps every session and video, and
   assert.equal((await DB.getAllVideos())[0].title, "Kept video");
   assert.equal(await DB.outboxCount(), 0, "nothing is queued for upload on an install that never paired");
   const db = await new Promise(r => { const o = idb.open("yt_watch_tracker"); o.onsuccess = () => r(o.result); });
-  assert.equal(db.version, 3);
+  assert.equal(db.version, 4);
   assert.ok(db.objectStoreNames.contains("outbox"));
+  assert.ok(db.objectStoreNames.contains("events") && db.objectStoreNames.contains("evoutbox"), "v4 adds the playback event stores");
+  assert.equal(await DB.eventCount(), 0);
+  assert.equal(await DB.evOutboxCount(), 0);
   db.close();
 });
 
@@ -86,4 +89,56 @@ test("acknowledging removes a row only when the acknowledged revision covers it"
   assert.equal(await DB.outboxCount(), 1);
   assert.equal(await DB.outboxAck([{ sessionId: "x", rev: 3 }, { sessionId: "nope", rev: 1 }]), 1);
   assert.equal(await DB.outboxCount(), 0);
+});
+
+const ev = (sid, seq, over = {}) => ({ id: `${sid}:e${seq}`, sessionId: sid, videoId: over.videoId || "v1", seq, type: "VIDEO_PAUSED", ts: 1000 + seq, pos: seq, rate: 1, prev: "playing", next: "paused", meta: {}, ...over });
+
+test("events are written atomically with their upload queue rows, and re-delivery is a no-op", async () => {
+  const idb = new IDBFactory();
+  const DB = loadDb(idb);
+  await DB.putEvents([ev("a", 1), ev("a", 2)], true);
+  await DB.putEvents([ev("b", 1)], false);                           // not paired: stored locally, not queued
+  assert.equal(await DB.eventCount(), 3);
+  assert.deepEqual((await DB.evOutboxAll()).map(r => r.id), ["a:e1", "a:e2"]);
+  await DB.putEvents([ev("a", 1), ev("a", 2)], true);                // the content script retried a message
+  assert.equal(await DB.eventCount(), 3);
+  assert.equal(await DB.evOutboxCount(), 2);
+  const again = loadDb(idb);                                         // browser restart
+  assert.deepEqual((await again.evOutboxAll()).map(r => r.id), ["a:e1", "a:e2"]);
+  assert.deepEqual((await again.getEventsBySession("a")).map(e => e.seq), [1, 2]);
+});
+
+test("the event queue keeps a session in sequence order and removes only acknowledged ids", async () => {
+  const DB = loadDb(new IDBFactory());
+  await DB.putEvents([ev("a", 3), ev("a", 1), ev("a", 2)], true);    // same instant: order must still be by seq
+  const q = await DB.evOutboxAll();
+  assert.deepEqual(q.map(r => r.seq), [1, 2, 3]);
+  assert.equal(await DB.evOutboxAck(["a:e1", "nope"]), 2);
+  assert.deepEqual((await DB.evOutboxAll()).map(r => r.id), ["a:e2", "a:e3"]);
+  assert.equal(await DB.eventCount(), 3, "acknowledged events stay in local history");
+  assert.deepEqual([...(await DB.getEventsByIds(["a:e2", "zzz"])).map(e => e && e.id)], ["a:e2", undefined]);
+});
+
+test("deleting a video or old sessions removes their events and queue rows with them", async () => {
+  const DB = loadDb(new IDBFactory());
+  await DB.putSession({ sessionId: "old", videoId: "v1", startTs: 10, rev: 1, updatedAt: 1 }, false);
+  await DB.putSession({ sessionId: "new", videoId: "v2", startTs: 9000, rev: 1, updatedAt: 1 }, false);
+  await DB.putEvents([ev("old", 1, { videoId: "v1" }), ev("new", 1, { videoId: "v2" })], true);
+  assert.deepEqual([...await DB.deleteSessionsBefore(5000)], ["v1"]);
+  assert.deepEqual((await DB.evOutboxAll()).map(r => r.id), ["new:e1"]);
+  assert.equal(await DB.eventCount(), 1);
+  await DB.deleteVideo("v2");
+  assert.equal(await DB.eventCount(), 0);
+  assert.equal(await DB.evOutboxCount(), 0);
+  await DB.putEvents([ev("x", 1)], true);
+  await DB.clearAll();
+  assert.equal(await DB.eventCount() + await DB.evOutboxCount(), 0);
+});
+
+test("history recorded before pairing can be queued for upload on request", async () => {
+  const DB = loadDb(new IDBFactory());
+  await DB.putEvents([ev("a", 1), ev("a", 2)], false);
+  assert.equal(await DB.evOutboxCount(), 0);
+  assert.equal(await DB.evOutboxEnqueueAll(), 2);
+  assert.equal(await DB.evOutboxCount(), 2);
 });

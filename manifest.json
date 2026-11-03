@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YouTube Watch Tracker",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "minimum_chrome_version": "116",
   "description": "Visible, YouTube-only watch-time tracking stored on this device. Optional, opt-in private sync to your own server (owner approval required).",
   "permissions": ["storage", "alarms"],
@@ -11,7 +11,7 @@
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*"],
-      "js": ["lib/accounting.js", "content/tracker.js"],
+      "js": ["lib/accounting.js", "lib/playback.js", "content/tracker.js"],
       "run_at": "document_idle"
     }
   ],
