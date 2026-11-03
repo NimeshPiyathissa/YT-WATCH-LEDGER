@@ -1,6 +1,6 @@
 # Known issues and incomplete work
 
-Last reviewed for extension/server version 0.6.0.
+Last reviewed for extension/server version 0.7.0.
 
 ## 1. Remote `resume_tracking` can override the user's pause (known conflict, kept by decision)
 
@@ -26,6 +26,20 @@ The automated tests (95 + 37 extension tests, 134 server tests) cover the API, t
 - the HTTPS / reverse-proxy path, including WebSocket and event-stream pass-through.
 
 Run the check in [`INSTALL.md`](INSTALL.md#4-connect-the-browser-to-the-dashboard) before depending on it, and report anything off.
+
+## 3b. Video Details (0.7.0): limits and decisions
+
+- **Not yet verified on a real YouTube player by hand.** The recorder is tested against a scripted player and the page against a real browser with synthetic events; the checks that need a real player (ads, Shorts, scrubbing, throttled background tabs, crash recovery) are in [`MANUAL_TEST_CHECKLIST_VIDEO_DETAILS.md`](MANUAL_TEST_CHECKLIST_VIDEO_DETAILS.md).
+- **Timing is not sub-second.** Event times are the browser's clock at the instant the player fired the event; upload latency, background-tab throttling and service-worker suspension limit how fresh the page can be. Nothing claims better.
+- **Older history has no events.** Sessions from before 0.7 show *Summary only*. Nothing is reconstructed.
+- **Interrupted viewings are approximate by design.** A closed browser leaves the end unknown: the pause is *unresolved* ("at least N") and active time stops at the last heartbeat (written about every 5 s, a viewing is considered gone after 3 minutes without one).
+- **Rewatch time is approximate** (replayed content ÷ speed). Unique content is exact to the player's reported positions.
+- **Pause #N numbering is per viewing** in the timeline and global in the pause table.
+- **Behaviour changes:** a pause ends the viewing after 30 minutes (was 5); a finished video keeps its viewing open for 2 minutes so a replay is recognised; the content script ticks every 5 s instead of every second.
+- **PDF export** is a print-ready page you save as PDF from the browser (no PDF library).
+- **A device that is offline** holds its events and shows `DEVICE OFFLINE`; the page cannot see events that have not been delivered yet.
+- **The event stream per viewing is capped at 5000**; the page shows the latest 2000 events of a video and says when more exist (export has up to 20000).
+- Mobile layout, keyboard use and reduced-motion were reviewed in CSS and a desktop browser, not on a phone.
 
 ## 4. Other limits
 

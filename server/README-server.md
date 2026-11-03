@@ -56,7 +56,12 @@ POST /api/devices/:id/approve   PATCH /api/devices/:id {label}   POST /api/devic
 GET  /api/sessions[?status=all&device=]                -> sessions (id, device, status, last_seen, live)    POST /api/sessions/:id/revoke
 GET  /api/session-requests[?status=]                   -> deletion requests    POST /api/session-requests/:id/approve|deny {note?}   (owner only, decided once)
 GET  /api/pairing-codes                                -> code history (status, used by, mode)   POST /api/pairing-codes/:id/revoke
-GET  /api/events                                       Server-Sent Events for the dashboard (owner cookie)
+GET  /api/events                                       Server-Sent Events for the dashboard (owner cookie); video_event carries new playback events
+GET  /api/videos[?q&channel&completed&device&from&to&limit&offset]   videos with totals and whether they have event history
+GET  /api/video/:videoId[/live|/events|/sessions|/pauses|/analytics]   Video Details (see docs/VIDEO_DETAILS.md; filters device, session, from, to, type, completed, tz)
+GET  /api/video/:videoId/export?format=csv|json|print[&scope=events|pauses|sessions]   (audited)
+Device
+POST /api/sync/events {events:[...]≤200, clientNow}    idempotent by event id; acks {acked, rejected}
 GET|PUT /api/devices/:id/config {changes:{retention_days?,sync_interval_minutes?}}  GET /api/devices/:id/config/history   (owner only; values validated, versioned, audited; null clears a setting)
 POST /api/devices/:id/commands {type,payload}          pause_tracking|resume_tracking|set_retention|delete_all|delete_range
 GET  /api/history?device=&from=&to=&q=&url=&limit=&offset=    combined, every record tagged with its source device

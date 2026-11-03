@@ -1,4 +1,4 @@
-# Manual test checklist: Chrome extension v0.6.0
+# Manual test checklist: Chrome extension v0.7.0
 
 Purpose: confirm by hand what the automated tests cannot (how the screens look and behave in a real Chrome). Tick each box; note anything that differs from "Expected".
 
@@ -15,12 +15,12 @@ Purpose: confirm by hand what the automated tests cannot (how the screens look a
 ## Part A: Install the package **[OFFLINE]**
 
 ### A1. Check the ZIP
-- [ ] The file exists: `dist\yt-watch-tracker-v0.6.0.zip` (about 140 KB), next to `yt-watch-tracker-v0.6.0.zip.sha256`.
+- [ ] The file exists: `dist\yt-watch-tracker-v0.7.0.zip` (about 140 KB), next to `yt-watch-tracker-v0.7.0.zip.sha256`.
 - [ ] Verify its checksum (PowerShell):
   ```powershell
   cd "C:\YT VIDEO TRACKER\yt-watch-tracker\dist"
-  (Get-FileHash .\yt-watch-tracker-v0.6.0.zip -Algorithm SHA256).Hash.ToLower()
-  Get-Content .\yt-watch-tracker-v0.6.0.zip.sha256
+  (Get-FileHash .\yt-watch-tracker-v0.7.0.zip -Algorithm SHA256).Hash.ToLower()
+  Get-Content .\yt-watch-tracker-v0.7.0.zip.sha256
   ```
   Expected: the two hashes are identical. (If you rebuilt since, the `.sha256` file is the reference.)
 
@@ -28,7 +28,7 @@ Purpose: confirm by hand what the automated tests cannot (how the screens look a
 - [ ] Pick a **permanent** folder in the **test** setup, for example `C:\Tools\yt-test\`. Not Downloads or Temp, and don't move it later: for an unpacked extension Chrome derives the extension ID from this path.
 - [ ] Extract: right-click the ZIP → *Extract All…* → that folder, **or**
   ```powershell
-  Expand-Archive -Path "C:\YT VIDEO TRACKER\yt-watch-tracker\dist\yt-watch-tracker-v0.6.0.zip" -DestinationPath "C:\Tools\yt-test"
+  Expand-Archive -Path "C:\YT VIDEO TRACKER\yt-watch-tracker\dist\yt-watch-tracker-v0.7.0.zip" -DestinationPath "C:\Tools\yt-test"
   ```
 - [ ] `C:\Tools\yt-test\manifest.json` exists **directly** in that folder (not inside an extra subfolder), alongside `background.js`, `popup\`, `lib\`, `icons\`.
 - [ ] There is **no** `server`, `docs`, `tests`, `.env` or `.db` file in the folder.
@@ -41,9 +41,9 @@ Purpose: confirm by hand what the automated tests cannot (how the screens look a
 - [ ] If it will not load, note the exact message: "Manifest file is missing" means the wrong folder; "requires Chrome 116" means update Chrome.
 
 ### A4. Check version, icon and permissions
-- [ ] The card shows **Version 0.6.0**.
+- [ ] The card shows **Version 0.7.0**.
 - [ ] Click **Details**: *Permissions* lists only reading/changing data on `www.youtube.com` (and storage is implicit). No "all sites" access is granted at install. Note the **ID** (32 letters); it will change if you reload from a different folder.
-- [ ] Open a new tab to `chrome-extension://<the ID>/manifest.json`. Expected: `"manifest_version": 3`, `"version": "0.6.0"`, `"minimum_chrome_version": "116"`, `permissions` = `storage`, `alarms`, and **no** `"key"` field.
+- [ ] Open a new tab to `chrome-extension://<the ID>/manifest.json`. Expected: `"manifest_version": 3`, `"version": "0.7.0"`, `"minimum_chrome_version": "116"`, `permissions` = `storage`, `alarms`, and **no** `"key"` field.
 - [ ] The toolbar icon (pin it via the puzzle-piece menu) is a **verdigris rounded square with three white bars**, crisp at toolbar size; the card in `chrome://extensions` shows the larger version of the same mark.
 
 ---
@@ -57,7 +57,7 @@ Turn off Wi-Fi or just don't start a server.
 - [ ] Header: **Watch Tracker** with the mark, and a pill reading **Tracking on**.
 - [ ] A **Not connected** card with *Server address* and *Pairing code* fields and a **Connect** button; the note says nothing is sent before you pair.
 - [ ] Two tiles **Today** and **Last 7 days** (values like `0s` on a fresh profile).
-- [ ] Buttons **Open dashboard**, **Settings**, **Device info**; footer reads **Version 0.6.0**.
+- [ ] Buttons **Open dashboard**, **Settings**, **Device info**; footer reads **Version 0.7.0**.
 - [ ] A **Track watch time** switch (on). Turn it **off**: the pill changes to *Tracking paused* and the hint says nothing is being recorded; turn it on again. This is the user's own pause control and must always work.
 - [ ] Switch your OS between light and dark: the popup follows it and stays readable (there is no theme selector any more).
 
@@ -69,7 +69,7 @@ Turn off Wi-Fi or just don't start a server.
 
 ### B3. The other pages open
 - [ ] **Settings** opens in a tab and is **read-only**: cards for *Tracking*, *Server connection*, *Synchronization*, *Current configuration* (each value tagged *Local*) and *This device*; no switches, selects, buttons that change anything, or password section. A note says the page cannot stop you pausing, deleting or uninstalling.
-- [ ] **Device info** opens and is read-only: *This installation* (installation ID, version 0.6.0, browser/OS), *Status*, *Activity* (last activity, last sync, videos, sessions, storage used), and a **Diagnostics** log with only a **Copy log** button (no Clear).
+- [ ] **Device info** opens and is read-only: *This installation* (installation ID, version 0.7.0, browser/OS), *Status*, *Activity* (last activity, last sync, videos, sessions, storage used), and a **Diagnostics** log with only a **Copy log** button (no Clear).
 - [ ] On the local **Dashboard**, scroll to **Your data**: **Export all (JSON)** downloads a file; **Delete date range…**, **Delete channel…** and **Delete all** each need a second click ("Click again…") before anything is removed. Cancel at the confirmation and check nothing was deleted.
 - [ ] (Needs internet, but not the server.) Open the YouTube site with tracking on, watch a few seconds, and confirm Today/Last 7 days on the popup change and the video appears in the Dashboard history.
 - [ ] **Open dashboard** (the local one) opens and renders.
@@ -115,7 +115,7 @@ node src/server.js
 ### D2. Extension side, normal pairing
 - [ ] Popup → Server `http://127.0.0.1:8443`, Code = the code, **Connect**. Chrome asks to allow access to `127.0.0.1`: accept.
 - [ ] Expected in the popup: green banner **Connected Successfully**, a **Connected** card (server, device `Test PC`, session id, *Channel* **Live** within a few seconds, last sync, pending uploads 0), and the pill/notes updated. Buttons **Sync** and **Delete session** are present.
-- [ ] Expected in the dashboard **without reloading**: the code panel turns green **Connected** with the device name; the device card appears with **Online**, **Extension v0.6.0**, *Last active* "now", **1 active** session, channel **Live**; the overview shows 1 online / 1 device / 1 session; the **Active sessions** tab lists one row; **Pairing history** shows the code as *Used* with its mode *Connects at once*.
+- [ ] Expected in the dashboard **without reloading**: the code panel turns green **Connected** with the device name; the device card appears with **Online**, **Extension v0.7.0**, *Last active* "now", **1 active** session, channel **Live**; the overview shows 1 online / 1 device / 1 session; the **Active sessions** tab lists one row; **Pairing history** shows the code as *Used* with its mode *Connects at once*.
 - [ ] Try the same (used) code again from the popup of a second profile, or watch the Pairing history: a reused code must be refused (*That code is invalid, expired or already used.*).
 
 ### D3. Code states

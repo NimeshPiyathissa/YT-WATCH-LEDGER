@@ -19,6 +19,10 @@ Optional settings in `.env` (all have safe defaults):
 
 The pairing lockout is held in memory: restarting the server clears it. The per-hour rate limit is separate.
 
+## Video Details
+
+**Videos** lists every video your devices have played; open one for its live status, event timeline, every pause and resume, viewing history, charts and export. See [`VIDEO_DETAILS.md`](VIDEO_DETAILS.md). Upgrading to 0.7.0 applies migration `006` automatically at start (additive; take a backup first as usual).
+
 ## The Devices page
 
 **Overview strip.** Devices online now, total devices, active sessions, and session-deletion requests waiting for you. The sidebar badge counts devices awaiting approval plus requests awaiting a decision.
