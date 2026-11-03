@@ -74,6 +74,8 @@
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) set(); else requestAnimationFrame(() => requestAnimationFrame(set));
   };
   const clock = ms => { const t = Math.max(0, Math.floor((ms || 0) / 1000)), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), x = t % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); };
+  // The small surface the Video Details module (video.js) uses; everything else in this file stays private.
+  window.WL = { api, download, toast, errText, refreshed, guarded, empty: (...a) => empty(...a), head: (...a) => head(...a), chip: (...a) => chip(...a), loadDevices: () => loadDevices(), devices: () => devices };
   async function loadDevices() {
     devices = (await api("GET", "/api/devices")).slice().sort((a, b) => a.enrolled_at - b.enrolled_at);
     // the sidebar badge counts devices awaiting approval plus session deletion requests awaiting a decision
@@ -116,13 +118,13 @@
 
   /* ---- router ---- */
   function route() {
-    clearInterval(timer); timer = null; clearInterval(cpTimer); cpTimer = null; closeEvents();
+    clearInterval(timer); timer = null; clearInterval(cpTimer); cpTimer = null; closeEvents(); window.WLVideo.dispose();
     const h = location.hash || "#/overview";
     const login = h === "#/login";
     $("login").hidden = !login; $("shell").hidden = login;
     closeNav(false);
     document.querySelectorAll("[data-nav]").forEach(a => {
-      const on = h.indexOf("#/" + a.dataset.nav) === 0 || (a.dataset.nav === "devices" && h.indexOf("#/device/") === 0);
+      const on = h.indexOf("#/" + a.dataset.nav) === 0 || (a.dataset.nav === "devices" && h.indexOf("#/device/") === 0) || (a.dataset.nav === "videos" && h.indexOf("#/video/") === 0);
       a.classList.toggle("active", on); if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
     if (h !== lastPath) { window.scrollTo(0, 0); lastPath = h; }
@@ -130,6 +132,9 @@
     app.innerHTML = SKELETON;
     const m = h.match(/^#\/device\/([\w-]+)$/);
     if (m) return pageGuard(pageDevice)(m[1]);
+    const vm = h.match(/^#\/video\/([\w-]{1,32})$/);
+    if (vm) return pageGuard(() => window.WLVideo.render(app, vm[1]))();
+    if (h === "#/videos") return pageGuard(() => window.WLVideo.renderList(app))();
     if (h === "#/history") return pageGuard(pageHistory)();
     const dm = h.match(/^#\/devices(?:\/(requests|sessions|pairing))?$/);
     if (dm) return pageGuard(pageDevices)(dm[1]);
@@ -334,7 +339,8 @@
           <dt>Watched</dt><dd class="num">${dur(it.watchedMs)} of ${it.duration ? dur(it.duration * 1000) : "unknown length"}</dd>
           <dt>Position</dt><dd class="num">started at ${it.startSec == null ? "n/a" : it.startSec + " s"}, ended at ${it.positionSec} s, furthest ${it.furthestSec} s</dd>
           <dt>Interaction</dt><dd>${it.seeks} seeks (${it.rewinds} backwards), ${it.pauses} pauses${it.completed ? ", finished" : ""}</dd>
-          <dt>Session</dt><dd class="num small">${esc(it.sessionId)} · revision ${it.rev}</dd></dl></td></tr>`);
+          <dt>Session</dt><dd class="num small">${esc(it.sessionId)} · revision ${it.rev}</dd>
+          <dt>Details</dt><dd><a class="btn btn-sm" href="#/video/${esc(it.videoId)}">${ic("activity")}Open Video Details</a></dd></dl></td></tr>`);
       };
       box.querySelectorAll("tr.click").forEach(tr => { tr.onclick = () => toggle(tr); tr.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(tr); } }; });
     }

@@ -394,6 +394,19 @@
     if (ms) { const m = String(Math.floor(((ts % 1000) + 1000) % 1000)).padStart(3, "0"); s = s.replace(/(\d{2})(\s?[AP]M)$/, "$1." + m + "$2"); }
     return s;
   }
+  // The instant (UTC ms) at which the wall clock in `tz` reads y-m-d h:mi:s. Used by the date and time-range filters, so
+  // "from 09:00" means 09:00 in the zone the page is showing, whatever the browser's own zone is.
+  function tzOffsetMs(ts, tz) {
+    const f = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const o = {}; f.formatToParts(new Date(ts)).forEach(p => { o[p.type] = Number(p.value); });
+    return Date.UTC(o.year, o.month - 1, o.day, o.hour, o.minute, o.second) - Math.floor(ts / 1000) * 1000;
+  }
+  function zonedToUtc(y, mo, d, h, mi, s, ms, tz) {
+    const zone = validZone(tz) ? tz : "UTC", naive = Date.UTC(y, mo - 1, d, h || 0, mi || 0, s || 0, ms || 0);
+    let t = naive - tzOffsetMs(naive, zone);
+    t = naive - tzOffsetMs(t, zone); // second pass settles the offset on the far side of a daylight-saving change
+    return t;
+  }
   const plural = (n, w) => n + " " + w + (n === 1 ? "" : "s");
   function formatDuration(ms) {
     if (ms == null || !Number.isFinite(ms)) return "—";
@@ -410,6 +423,6 @@
   }
 
   root.YTPlayback = { TYPES, STATES, REASONS, BUFFER_DEBOUNCE_MS, MAX_EVENTS_PER_SESSION, createRecorder, interruptedEvent, desiredState,
-    fold, project, pauseStats, pauseDistribution, rollup, validateEvent, formatDate, formatTime, formatDuration, formatClock, validZone };
+    fold, project, pauseStats, pauseDistribution, rollup, validateEvent, formatDate, formatTime, formatDuration, formatClock, validZone, tzOffsetMs, zonedToUtc };
   if (typeof module !== "undefined" && module.exports) module.exports = root.YTPlayback;
 })(typeof self !== "undefined" ? self : this);

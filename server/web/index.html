@@ -10,6 +10,7 @@
   <link rel="preload" href="vendor/fonts/bricolage-grotesque-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="vendor/theme.css" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="video.css" />
 </head>
 <body>
   <div class="shell" id="shell" hidden>
@@ -26,6 +27,7 @@
       <nav id="nav" aria-label="Sections">
         <a href="#/overview" data-nav="overview"><span data-icon="layout-dashboard"></span>Overview</a>
         <a href="#/history" data-nav="history"><span data-icon="history"></span>History</a>
+        <a href="#/videos" data-nav="videos"><span data-icon="film"></span>Videos</a>
         <a href="#/devices" data-nav="devices"><span data-icon="monitor-smartphone"></span>Devices <span class="badge" id="pendingBadge" hidden></span></a>
         <a href="#/data" data-nav="data"><span data-icon="database"></span>Data &amp; backups</a>
         <a href="#/audit" data-nav="audit"><span data-icon="scroll-text"></span>Audit log</a>
@@ -42,6 +44,9 @@
   <script src="vendor/icons.js"></script>
   <script src="vendor/util.js"></script>
   <script src="vendor/charts.js"></script>
+  <script src="vendor/playback.js"></script>
+  <script src="video-charts.js"></script>
+  <script src="video.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

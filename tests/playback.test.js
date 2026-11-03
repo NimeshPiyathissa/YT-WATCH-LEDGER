@@ -374,3 +374,16 @@ test("duration formatting", () => {
   assert.equal(P.formatDuration(null), "—");
   assert.equal(P.formatClock(155 * S), "00:02:35");
 });
+
+test("local date and time in a chosen zone convert to the right UTC instant, across daylight saving and midnight", () => {
+  assert.equal(P.zonedToUtc(2026, 11, 3, 9, 0, 0, 0, "UTC"), Date.UTC(2026, 10, 3, 9, 0, 0));
+  assert.equal(P.zonedToUtc(2026, 11, 3, 9, 0, 0, 0, "Asia/Colombo"), Date.UTC(2026, 10, 3, 3, 30, 0));       // UTC+5:30
+  assert.equal(P.zonedToUtc(2026, 11, 3, 9, 0, 0, 0, "America/New_York"), Date.UTC(2026, 10, 3, 14, 0, 0));    // EST (UTC-5) after the November change
+  assert.equal(P.zonedToUtc(2026, 7, 3, 9, 0, 0, 0, "America/New_York"), Date.UTC(2026, 6, 3, 13, 0, 0));      // EDT (UTC-4)
+  assert.equal(P.zonedToUtc(2026, 11, 3, 0, 0, 0, 0, "Asia/Colombo"), Date.UTC(2026, 10, 2, 18, 30, 0));       // local midnight is the previous UTC day
+  assert.equal(P.zonedToUtc(2026, 11, 3, 23, 59, 59, 999, "Asia/Tokyo"), Date.UTC(2026, 10, 3, 14, 59, 59, 999));
+  // round trip: what the display functions show for that instant is what was asked for
+  const ts = P.zonedToUtc(2026, 3, 8, 12, 15, 0, 0, "America/New_York");
+  assert.match(P.formatTime(ts, "America/New_York"), /^12:15:00\sPM$/);
+  assert.equal(P.zonedToUtc(2026, 1, 1, 0, 0, 0, 0, "Not/AZone"), Date.UTC(2026, 0, 1), "an invalid zone is treated as UTC");
+});

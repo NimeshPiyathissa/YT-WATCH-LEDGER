@@ -188,7 +188,7 @@ export default async function (app, { db }) {
   app.get("/api/video/:videoId/sessions", (req, reply) => {
     const sc = scope(req, reply); if (!sc) return;
     const { events, summaryOnly } = allSessions(sc);
-    const items = [...events.map(({ segments, runs, ...s }) => s), ...summaryOnly].sort((a, b) => b.startedAt - a.startedAt);
+    const items = [...events.map(({ runs, ...s }) => s), ...summaryOnly].sort((a, b) => b.startedAt - a.startedAt);
     return { total: items.length, items, serverNow: Date.now() };
   });
 
