@@ -60,7 +60,7 @@
         wire(load);
       } catch (e) {
         if (e.message === "unauthorized" || e.message === "navigated" || mine !== seq) return;
-        box.innerHTML = `<section class="card">${WL.empty("shield", "Security Center could not load", WL.errText(e), `<button class="btn btn-accent" type="button" id="scRetry">${ic("refresh-cw")}Try again</button>`, "bad")}</section>`;
+        box.innerHTML = `<section class="card">${WL.empty("shield-check", "Security Center could not load", WL.errText(e), `<button class="btn btn-accent" type="button" id="scRetry">${ic("refresh-cw")}Try again</button>`, "bad")}</section>`;
         $("scRetry").onclick = () => load();
       }
     };

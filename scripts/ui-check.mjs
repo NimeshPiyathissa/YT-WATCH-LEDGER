@@ -52,7 +52,7 @@ async function goto(url) {
 }
 
 const PAGES = [["overview", "#/overview", "Overview"], ["analytics", "#/analytics", "Analytics"], ["history", "#/history", "History"], ["videos", "#/videos", "Videos"],
-  ["devices", "#/devices", "Devices"], ["health", "#/health", "Health Center"], ["data", "#/data", null], ["security", "#/security", "Security Center"], ["audit", "#/audit", null]];
+  ["devices", "#/devices", "Devices"], ["health", "#/health", "Health Center"], ["data", "#/data", null], ["security", "#/security", "Security Center"], ["notifications", "#/notifications", "Notifications"], ["audit", "#/audit", null]];
 const SIZES = [["phone", 390, 800, true], ["tablet", 820, 1100, false], ["desktop", 1440, 900, false]];
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log((ok ? "  ok   " : "  FAIL ") + name + (detail ? "  (" + detail + ")" : "")); };

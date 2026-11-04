@@ -142,6 +142,7 @@
     if (h === "#/analytics") return pageGuard(() => window.WLAnalytics.render(app))();
     if (h === "#/health") return pageGuard(() => window.WLHealth.render(app))();
     if (h === "#/security") return pageGuard(() => window.WLSecurity.render(app))();
+    if (h === "#/notifications") return pageGuard(() => window.WLNotifications.render(app))();
     if (h === "#/history") return pageGuard(pageHistory)();
     const dm = h.match(/^#\/devices(?:\/(requests|sessions|pairing))?$/);
     if (dm) return pageGuard(pageDevices)(dm[1]);
@@ -705,4 +706,5 @@
   }
 
   route();
+  window.WLNotifications.startBadge();
 })();

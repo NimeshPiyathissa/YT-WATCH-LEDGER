@@ -24,6 +24,7 @@ import analyticsRoutes from "./routes/analytics.js";
 import healthRoutes from "./routes/health.js";
 import deviceCenterRoutes from "./routes/deviceCenter.js";
 import securityRoutes from "./routes/security.js";
+import notificationRoutes from "./routes/notifications.js";
 import { createHub } from "./lib/realtime.js";
 
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "web");
@@ -80,6 +81,7 @@ export async function buildApp({ db, logger = false, https = null, config = {} }
   await app.register(healthRoutes, { db, config });
   await app.register(deviceCenterRoutes, { db, config });
   await app.register(securityRoutes, { db });
+  await app.register(notificationRoutes, { db, config });
   await app.register(fastifyStatic, { root: WEB }); // admin SPA (PART B §B7)
 
   app.get("/api/health", async () => ({ ok: true }));

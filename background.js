@@ -157,9 +157,15 @@ async function handleVideoEvents(events) {
   // With tracking paused or detail collection off nothing new is recorded; only the marker that closes a viewing already in
   // progress is kept, so the owner never sees a session that looks open forever.
   if (c.tracking_enabled === false || c.collect_detail === false) list = list.filter(e => END_TYPES.indexOf(e.type) >= 0);
-  if (!list.length) return { ok: true, stored: 0 };
+  const incomingEnds = list.filter(e => END_TYPES.indexOf(e.type) >= 0); // a retried delivery of an end already stored still retires the saved state
+  // A viewing is closed once. A second end event for it (a late "interrupted" after a normal end) would contradict the first.
+  for (const sid of new Set(list.filter(e => END_TYPES.indexOf(e.type) >= 0).map(e => e.sessionId))) {
+    if ((await DB.getEventsBySession(sid)).some(e => END_TYPES.indexOf(e.type) >= 0)) list = list.filter(e => e.sessionId !== sid || END_TYPES.indexOf(e.type) < 0);
+  }
+  if (!list.length) { await retireRecorder(incomingEnds); return { ok: true, stored: 0 }; }
   await DB.putEvents(list, SYNC.isEnrolled(await SYNC.cfg())); // paired devices queue them in the same transaction
   await setCfg({ last_activity: Date.now() });
+  await retireRecorder(incomingEnds);
   await trimEventQueue();
   // Fast upload (about a second) only while the person at this device has allowed live viewing. Otherwise events ride the regular
   // sync, and a viewing that has just ended is sent after a few seconds.
@@ -169,11 +175,21 @@ async function handleVideoEvents(events) {
   return { ok: true, stored: list.length };
 }
 
+// The content script keeps its recorder state (live_rec) until the end of that viewing is safely stored here; only then is it retired.
+// A different viewing's state is never touched.
+async function retireRecorder(list) {
+  const ended = new Set(list.filter(e => END_TYPES.indexOf(e.type) >= 0).map(e => e.sessionId));
+  if (!ended.size) return;
+  const { live_rec } = await getCfg({ live_rec: null });
+  if (live_rec && ended.has(live_rec.sessionId)) await setCfg({ live_rec: null });
+}
+
 // A recorder that vanished without an end event (browser closed, tab crashed, power lost) is closed at its last heartbeat:
 // the recorded timestamp, never "now". Open pauses then become "unresolved" instead of getting an invented end.
 async function recoverInterrupted() {
   const { live_rec } = await getCfg({ live_rec: null });
   if (!live_rec || live_rec.finished || !live_rec.started || Date.now() - live_rec.lastTs < STALE_MS) return;
+  if ((await DB.getEventsBySession(live_rec.sessionId)).some(e => END_TYPES.indexOf(e.type) >= 0)) { await setCfg({ live_rec: null }); return; } // already closed normally
   const ev = P.interruptedEvent(live_rec, live_rec.lastTs);
   if (ev) {
     await DB.putEvents([ev], SYNC.isEnrolled(await SYNC.cfg()));

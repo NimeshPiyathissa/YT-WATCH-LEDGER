@@ -18,17 +18,19 @@ export function findChrome() {
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-export async function launch({ extensionDir, extraHostPermissions = ["http://127.0.0.1/*"], headless = true }) {
+export async function launch({ extensionDir, extraHostPermissions = ["http://127.0.0.1/*"], headless = true, chromeArgs = [] }) {
   const chrome = findChrome();
   if (!chrome) throw new Error("no Chrome found");
   const ext = fs.mkdtempSync(path.join(os.tmpdir(), "wl-ext-")), profile = fs.mkdtempSync(path.join(os.tmpdir(), "wl-prof-"));
-  fs.cpSync(extensionDir, ext, { recursive: true });
-  const mf = JSON.parse(fs.readFileSync(path.join(ext, "manifest.json"), "utf8"));
-  mf.host_permissions = [...new Set([...(mf.host_permissions || []), ...extraHostPermissions])];
-  fs.writeFileSync(path.join(ext, "manifest.json"), JSON.stringify(mf, null, 2));
+  if (extensionDir) { // without one this is just a clean temporary browser (the dashboard interaction test uses it that way)
+    fs.cpSync(extensionDir, ext, { recursive: true });
+    const mf = JSON.parse(fs.readFileSync(path.join(ext, "manifest.json"), "utf8"));
+    mf.host_permissions = [...new Set([...(mf.host_permissions || []), ...extraHostPermissions])];
+    fs.writeFileSync(path.join(ext, "manifest.json"), JSON.stringify(mf, null, 2));
+  }
 
   const proc = spawn(chrome, [...(headless ? ["--headless=new"] : []), "--remote-debugging-pipe", "--enable-unsafe-extension-debugging", `--user-data-dir=${profile}`,
-    "--no-first-run", "--no-default-browser-check", "--mute-audio", "--autoplay-policy=no-user-gesture-required", "--window-size=1280,800", "about:blank"], { stdio: ["ignore", "ignore", "ignore", "pipe", "pipe"] });
+    "--no-first-run", "--no-default-browser-check", ...chromeArgs, "--mute-audio", "--autoplay-policy=no-user-gesture-required", "--window-size=1280,800", "about:blank"], { stdio: ["ignore", "ignore", "ignore", "pipe", "pipe"] });
   const [toChrome, fromChrome] = [proc.stdio[3], proc.stdio[4]];
   let buf = "", id = 0; const pending = new Map(), listeners = [];
   fromChrome.on("data", d => {
@@ -41,7 +43,7 @@ export async function launch({ extensionDir, extraHostPermissions = ["http://127
   });
   const send = (method, params = {}, sessionId) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); toChrome.write(JSON.stringify({ id: i, method, params, ...(sessionId ? { sessionId } : {}) }) + "\0"); });
 
-  const { id: extensionId } = await send("Extensions.loadUnpacked", { path: ext });
+  const extensionId = extensionDir ? (await send("Extensions.loadUnpacked", { path: ext })).id : null;
   const targets = async () => (await send("Target.getTargets")).targetInfos;
   const sessions = new Map();
   async function attach(targetId) {

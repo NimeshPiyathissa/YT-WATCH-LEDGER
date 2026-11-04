@@ -95,7 +95,7 @@ ADMIN_EMAIL=owner@example.com; ADMIN_PASSWORD='Str0ng&Secret#2026'
 setup_database >/tmp/wl-db1.txt 2>&1
 [ -f "$WL_VAR/data/tracker.db" ] && pass "the database file is created" || flunk "database not created" "$(cat /tmp/wl-db1.txt | tail -3)"
 q() { ( cd "$REPO/server" && "$WL_NODE" -e "const D=require('better-sqlite3');const d=new D(process.argv[1],{readonly:true});console.log(JSON.stringify(d.prepare(process.argv[2]).all()))" "$WL_VAR/data/tracker.db" "$1" ); }
-[ "$(q 'SELECT COUNT(*) n FROM schema_migrations' | tr -d '[]' | sed 's/.*:\([0-9]*\).*/\1/')" = "7" ] && pass "all 7 migrations are applied" || flunk "migrations" "$(q 'SELECT name FROM schema_migrations')"
+[ "$(q 'SELECT COUNT(*) n FROM schema_migrations' | tr -d '[]' | sed 's/.*:\([0-9]*\).*/\1/')" = "$(ls "$REPO"/server/migrations/*.sql | wc -l | tr -d " ")" ] && pass "every migration in the release is applied" || flunk "migrations" "$(q 'SELECT name FROM schema_migrations')"
 contains "$(q 'SELECT email FROM admins')" "owner@example.com" && pass "the administrator account exists" || flunk "administrator account"
 contains "$(q 'SELECT pw_hash FROM admins')" '$argon2' && pass "the password is stored as an argon2 hash, not in clear" || flunk "password hash"
 contains "$(cat /tmp/wl-db1.txt)" "Str0ng" && flunk "the password is never printed" || pass "the password is never printed"

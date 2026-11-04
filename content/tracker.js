@@ -102,16 +102,20 @@
     // A previous viewing that never got an end event (browser closed, crash) is closed at its last heartbeat.
     if (rec) safe(() => chrome.storage.local.get({ live_rec: null }, o => {
       const old = o.live_rec;
-      if (old && old.sessionId !== session.sessionId && !old.finished) { const ev = P.interruptedEvent(old, old.lastTs); if (ev) send([ev]); }
+      if (old && old.sessionId !== session.sessionId && !old.finished && !closedHere.has(old.sessionId)) { const ev = P.interruptedEvent(old, old.lastTs); if (ev) send([ev]); }
     }));
   }
 
+  // The saved recorder state (live_rec) is NOT cleared here. The end event is sent while the page may already be going away and can
+  // be lost; if the state were gone too, nothing could ever close the viewing (measured in real Chrome). The service worker retires it
+  // when it has stored the end event; until then, recovery closes the viewing at its last heartbeat.
+  const closedHere = new Set(); // viewings this page already ended itself, so the next viewing does not report them as interrupted
   function endRecorder(reason, obs) {
     if (!rec) return;
+    closedHere.add(session.sessionId);
     const ev = rec.end(Date.now(), reason, obs || undefined);
     rec = null;
     unsent.push.apply(unsent, ev);
-    safe(() => chrome.storage.local.set({ live_rec: null }));
     drain();
   }
 

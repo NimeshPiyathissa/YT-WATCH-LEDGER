@@ -116,9 +116,23 @@ Nothing in this file claims real-browser or real-VPS testing that was not done; 
 - **Guard:** `tests/playback.test.js` ("a seek that takes a long time to finish counts as buffering", "a quick seek ... no buffering") and the real-Chrome test (`bufferingMs > 5 s` when the jump hangs, and playing + paused + buffering must fit inside the time the page was open).
 - **Verified:** in real Chrome after the fix: the same jump gave `activeMs` 7.7 s, `bufferingMs` 24.1 s, events `BUFFERING_STARTED ... SEEKED ... BUFFERING_ENDED`.
 
-### Observed in real Chrome, not fixed (no confirmed root cause)
-- **A19. The end-of-viewing event is sometimes lost when the page goes away.** `pagehide` queues `VIDEO_SESSION_ENDED` and sends it; the page can be gone first. Seen on navigating a tab to another page in most runs, and rarely when closing the tab. The viewing is then closed by the interrupted-viewing recovery (`SESSION_INTERRUPTED recovered`), which was observed working, either at the next viewing or on the periodic check. Not changed because the recovery covers it and I have not shown a case where it does not. A theoretical gap: `endRecorder` clears the saved recorder state at the same moment as it sends the message, so if only the message were lost nothing would close the viewing. I did not see that happen.
-- **A20. One resume (of roughly 45 pause/resume cycles in the end-to-end runs) was recorded about 7 s late**, by the periodic check instead of the `play` event, so a 3 s pause was stored as 10.5 s. Ten consecutive cycles in isolation were all recorded within 1 ms. Cause unknown. The end-to-end test reports this as a warning rather than hiding it; if it recurs it needs a closer look.
+### A19. The end of a viewing was often lost, and sometimes nothing could ever close it
+- **Where:** `content/tracker.js` (`endRecorder`) and `background.js`.
+- **Measured in real Chrome on real YouTube** (6 to 10 viewings per way of leaving): the `VIDEO_SESSION_ENDED` message, sent while the page is going away, was lost in roughly 20 to 60 percent of cases (navigating to another site: 3 of 5 lost; to `about:blank`: 2 of 5; closing the tab: 1 of 5; going to youtube.com's home: 0 of 5). That alone is survivable, because the saved recorder state (`live_rec`) lets the worker close the viewing later as *interrupted*. But `endRecorder` cleared `live_rec` at the same moment, and in **2 of 4** trials of one way of leaving both were lost or only the message was: the viewing then had no end event and **nothing left to recover from**, so it stayed open for ever (shown as still playing, its pause never closed).
+- **Fix:** the page no longer clears `live_rec`. The worker retires it only after it has stored the end event for that same viewing (a retried delivery also retires it; a different viewing's state is never touched). The worker also drops a second end event for a viewing that already has one, and recovery skips (and clears) a viewing that already ended; the page remembers which viewings it ended itself so the next viewing in the tab does not report them as interrupted.
+- **Guard:** `tests/tracker-dom.test.js` (saved state kept at the end; no contradictory "interrupted" after a normal end) and `server/test/video-device.test.js` (retire on store, only for the same viewing; duplicate end dropped; recovery does not double-close). Each failed on the old code except the "no second end" case, which guards the fix itself.
+- **Verified in real Chrome after the fix:** 10 viewings left by navigation: none stuck (`lost_STUCK` 0); the ones whose message was lost remained recoverable.
+- **Still true:** the end message is still often lost, so a viewing that was left by navigation is closed *late* (when the saved heartbeat is 3 minutes old and the next check runs), not at once. A faster close would need the worker to notice the page disconnecting (a long-lived port); that is a design change, not done here.
+
+### A20. A resume recorded about 7 s late (NOT reproduced, no fix)
+- **Seen once** in roughly 45 pause/resume cycles of the real-YouTube end-to-end runs: a 3 s pause stored as 10.5 s, with the resume recorded by the periodic check. The recorded position (10.9 s) matched the moment of the player's `play` event, which suggests the periodic check and the `play` event coincided and the pause length came from somewhere else; the raw timestamps of that run were not kept, so this is not established.
+- **Attempts to reproduce:** 10 cycles on real YouTube (all within 1 ms), then 100 cycles at 0.9 s / 1.1 s on a real `<video>` in real Chrome with the real content script and extension (a local stand-in page, `scripts/lib/mock-youtube.mjs`): **all 100 recorded within 50 ms, reason "user"**. A further 30-cycle run on real YouTube could not be completed because YouTube stopped serving the player to the automated browser (every video stuck at `readyState 0`, later in the day).
+- **Status:** open. No code was changed. `server/test/ext-e2e.test.js` now has a 40-cycle accuracy test on the stand-in page (all 40 pass) and still reports an overlong pause on real YouTube as a warning, so it will show up if it recurs.
+
+### A21. The Security page asked for an icon that does not exist
+- **Where:** `server/web/index.html`, `server/web/security.js` (my own work from the Security Center milestone, never released).
+- **Confirmed:** the new `server/test/icons.test.js` listed `shield` as missing. An unknown icon name does not draw nothing: it draws the `circle-alert` fallback, so the sidebar entry showed a warning symbol.
+- **Fix:** the Security entry and its empty state use `shield-check`. The test now checks every icon name used by the dashboard and the extension, and that the two copies of the icon set are identical; it also caught `bell`, which the Notification Center needed, and the icon was added.
 
 ## B. Defects found and fixed during development (never in a release)
 
@@ -161,3 +175,24 @@ Nothing in this file claims real-browser or real-VPS testing that was not done; 
 - Access cookies already issued stay valid up to 15 minutes after a sign-out or password change (they are stateless); renewal is refused at once.
 - The command-line password reset (`create-owner.js --reset`) is not written to the audit log.
 - The owner's sign-in list shows when a sign-in was last renewed, not a device name or address (the table stores neither).
+
+## E. Verification results after A19 / A20 and the Notification Center (2026-11-04)
+
+| Check | Result |
+|---|---|
+| Server suite (`npm test`; includes migrations, the headless-Chrome page check and the new click-through test) | 336 passed, 0 failed, 2 skipped (the opt-in real-Chrome tests) |
+| Extension suite | 70 passed, 0 failed |
+| Installer suite | 111 passed, 0 failed |
+| Click-through of Notifications, Security and Backups in headless Chrome (`ui-interact.test.js`) | 21 of 21 checks passed (buttons, forms, confirmation dialogs, validation, persistence after leaving the page) |
+| Real Chrome end-to-end (`WL_EXT_E2E=1`), real YouTube | 9 of 9 on the earlier runs; **YouTube later stopped serving the player to the automated browser** (every video stuck at `readyState 0`), so it could not be re-run against real YouTube after the A19 change |
+| Real Chrome end-to-end with the local stand-in page (`WL_EXT_E2E=1 WL_E2E_MOCK=1`) | 9 of 9, plus the 40-cycle pause/resume accuracy test (40 of 40 recorded on time); this is the real extension on a real `<video>`, **not YouTube** |
+| A19 in real Chrome after the fix | 10 viewings left by navigation: none stuck |
+| Syntax, `shellcheck`, doc links (193), extension build and ZIP, `npm audit --omit=dev --audit-level=high` | clean / passing |
+
+Two tests named specific migrations in a way that a new migration broke (the 007 test's "run again changes nothing", an older-backup list, and the installer's "7 migrations"). They were changed to name the migration they are about or to count the release's own files, so they keep their meaning and do not need editing for every future migration.
+
+### Still unverified
+- The installed extension through a real toolbar and permission prompt, ads, Shorts, several tabs, restart and sleep (manual checklist).
+- A real VPS.
+- The A19 fix against real YouTube after the change (YouTube blocked the automated browser); it is verified by unit tests, the device-harness tests and a real-Chrome run on real YouTube's page before YouTube refused service, plus the stand-in page.
+- A20 is not reproduced and not fixed.

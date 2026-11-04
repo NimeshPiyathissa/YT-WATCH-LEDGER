@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { openDb, migrate } from "../src/db.js";
+import { openDb, migrate, knownMigrations } from "../src/db.js";
 import { createBackup, restoreBackup, listBackups, checkIntegrity } from "../src/lib/backup.js";
 import { uuid } from "../src/lib/crypto.js";
 
@@ -134,7 +134,7 @@ test("restoring an older backup and starting the server upgrades it by running t
   db1.prepare("INSERT INTO schema_migrations(name,applied_at) VALUES ('001_init.sql',1)").run();
   db1.close();
   const db2 = openDb(file);
-  assert.deepEqual(migrate(db2), ["002_retention.sql", "003_single_owner_pairing.sql", "004_device_sessions.sql", "005_device_config.sql", "006_video_events.sql", "007_device_consents_sync_diagnostics.sql"]);
+  assert.deepEqual(migrate(db2), knownMigrations().slice(1)); // every migration after the first, in order
   assert.ok(db2.prepare("SELECT 1 FROM sqlite_master WHERE name='settings'").get());
   db2.close();
 });

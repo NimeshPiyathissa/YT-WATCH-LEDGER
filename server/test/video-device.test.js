@@ -220,3 +220,36 @@ test("separate viewings of the same video stay separate sessions on the server",
   assert.equal(an.sessions, 2);
   assert.equal(an.activeMs, 60 * S);
 });
+
+// BUG_FIX_REPORT A19: the worker retires the saved recorder state only when it has stored the end event, never closes a viewing twice,
+// and still closes one whose end event never arrived.
+test("storing a viewing's end event retires its saved recorder state, but not another viewing's", async () => {
+  const d = await pairedDevice();
+  d.store.live_rec = { sessionId: "other-live", videoId: "vidA", seq: 1, state: "playing", rate: 1, lastPos: 3, lastTs: Date.now(), started: true, finished: false, hidden: false };
+  await d.videoEvents(viewing("done1", v => v.play().wait(20).stop("pagehide")));
+  assert.equal(d.store.live_rec.sessionId, "other-live", "a different viewing's state is left alone");
+  d.store.live_rec = { sessionId: "done1", videoId: "vidA", seq: 9, state: "playing", rate: 1, lastPos: 3, lastTs: Date.now(), started: true, finished: false, hidden: false };
+  await d.videoEvents(viewing("done1", v => v.play().wait(20).stop("pagehide")));
+  assert.equal(d.store.live_rec, null);
+});
+
+test("a second end event for a viewing that already ended is dropped", async () => {
+  const d = await pairedDevice();
+  const evs = viewing("twice1", v => v.play().wait(20).stop("pagehide"));
+  await d.videoEvents(evs);
+  const rec = P.createRecorder({ sessionId: "twice1", videoId: "vidA", seq: 50, state: "playing", started: true, lastTs: Date.now() - 5 * S });
+  const intr = P.interruptedEvent(rec.snapshot(), Date.now() - 5 * S);
+  await d.videoEvents([intr]);
+  const ends = (await d.localEvents("twice1")).filter(e => /ENDED|INTERRUPTED/.test(e.type));
+  assert.equal(ends.length, 1);
+});
+
+test("recovery does not close a viewing that already has its end, and retires the stale saved state", async () => {
+  const d = await pairedDevice();
+  const t0 = Date.now() - 3600 * S;
+  await d.videoEvents(viewing("rec1", v => v.play().wait(20).stop("pagehide"), { start: t0 }));
+  d.store.live_rec = { sessionId: "rec1", videoId: "vidA", seq: 3, state: "playing", rate: 1, lastPos: 20, lastTs: t0 + 20 * S, started: true, finished: false, hidden: false };
+  await d.recover();
+  assert.equal((await d.localEvents("rec1")).filter(e => e.type === "VIDEO_SESSION_INTERRUPTED").length, 0);
+  assert.equal(d.store.live_rec, null);
+});

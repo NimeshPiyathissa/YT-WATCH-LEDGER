@@ -27,7 +27,7 @@ function v070db() {
 test("007 is additive: every v0.7.0 row survives unchanged and the new columns take their safe defaults", () => {
   const db = v070db();
   const before = Object.fromEntries(ALL.map(t => [t, rows(db, t)])), devBefore = rows(db, "devices");
-  assert.deepEqual(migrate(db), ["007_device_consents_sync_diagnostics.sql"]);
+  assert.deepEqual(migrate(db, { upTo: "007_device_consents_sync_diagnostics.sql" }), ["007_device_consents_sync_diagnostics.sql"]);
   for (const t of ALL) assert.deepEqual(rows(db, t), before[t], t + " is untouched");
   for (const old of devBefore) {
     const now = db.prepare("SELECT * FROM devices WHERE id=?").get(old.id);
@@ -37,7 +37,7 @@ test("007 is additive: every v0.7.0 row survives unchanged and the new columns t
     assert.equal(now.queue_events, 0); assert.equal(now.queue_dropped, 0);
   }
   assert.equal(db.prepare("SELECT COUNT(*) n FROM device_sync_errors").get().n, 0);
-  assert.deepEqual(migrate(db), [], "running it again changes nothing");
+  assert.deepEqual(migrate(db, { upTo: "007_device_consents_sync_diagnostics.sql" }), [], "running it again changes nothing");
 });
 
 test("007: the error history is removed with its device, and is keyed by time for fast reads", () => {

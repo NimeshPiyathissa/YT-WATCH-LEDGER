@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import * as B from "../src/lib/backup.js";
-import { openDb, migrate } from "../src/db.js";
+import { openDb, migrate, knownMigrations } from "../src/db.js";
 import { uuid, encryptJSON } from "../src/lib/crypto.js";
 import "./env.js";
 
@@ -52,7 +52,7 @@ test("A9b: an older backup is accepted and reported as needing migration", async
   db.exec("CREATE TABLE schema_migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)");
   migrate(db, { upTo: "005_device_config.sql" }); db.close();
   const info = B.inspectBackup(file);
-  assert.equal(info.schema.state, "older"); assert.deepEqual(info.schema.missing, ["006_video_events.sql", "007_device_consents_sync_diagnostics.sql"]); assert.equal(info.restorable, true);
+  assert.equal(info.schema.state, "older"); assert.deepEqual(info.schema.missing, knownMigrations().filter(n => n > "005_device_config.sql")); assert.equal(info.restorable, true);
 });
 
 test("A10: a backup whose records cannot be decrypted with this server's key is refused (restoring it would look fine and show nothing)", async () => {
