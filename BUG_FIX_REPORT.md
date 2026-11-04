@@ -108,6 +108,18 @@ Nothing in this file claims real-browser or real-VPS testing that was not done; 
 - **Fix:** `?action=`, `?before=` and `?limit=` (max 500). The default response is unchanged, so existing clients are unaffected.
 - **Guard:** `security-center.test.js` (A16).
 
+### A18. A seek that took long to finish was counted as playing time
+- **Where:** `lib/playback.js` (recorder), with the same code mirrored in `server/src/lib/playback.cjs` and `server/web/vendor/playback.js`; `content/tracker.js`.
+- **Found in:** real Chrome playing real YouTube (the first run of `server/test/ext-e2e.test.js`). Jumping 60 s ahead, past what is buffered, left the player in `seeking` for about 25 s. The recorder emitted nothing while seeking, so the stall stayed in the *playing* state and the server-side totals showed **36.4 s of active time in a viewing with about 10 s of real playback**. (The device's own session total, which does not use the event stream, was correct, so the two disagreed.)
+- **Confirmed:** by sampling the player (`seeking: true, readyState: 1`, position frozen, for 25-30 s) and by the new unit test, which fails on the old code (no `VIDEO_BUFFERING_STARTED`, 60 s active instead of 30 s).
+- **Fix:** an observation that is `seeking` while otherwise playing is treated as a stall (the same 400 ms debounce, so ordinary seeks are unchanged). It is recorded as buffering from the start of the seek and ends when the seek settles. `tracker.js` arms the debounce timer for seeking as well.
+- **Guard:** `tests/playback.test.js` ("a seek that takes a long time to finish counts as buffering", "a quick seek ... no buffering") and the real-Chrome test (`bufferingMs > 5 s` when the jump hangs, and playing + paused + buffering must fit inside the time the page was open).
+- **Verified:** in real Chrome after the fix: the same jump gave `activeMs` 7.7 s, `bufferingMs` 24.1 s, events `BUFFERING_STARTED ... SEEKED ... BUFFERING_ENDED`.
+
+### Observed in real Chrome, not fixed (no confirmed root cause)
+- **A19. The end-of-viewing event is sometimes lost when the page goes away.** `pagehide` queues `VIDEO_SESSION_ENDED` and sends it; the page can be gone first. Seen on navigating a tab to another page in most runs, and rarely when closing the tab. The viewing is then closed by the interrupted-viewing recovery (`SESSION_INTERRUPTED recovered`), which was observed working, either at the next viewing or on the periodic check. Not changed because the recovery covers it and I have not shown a case where it does not. A theoretical gap: `endRecorder` clears the saved recorder state at the same moment as it sends the message, so if only the message were lost nothing would close the viewing. I did not see that happen.
+- **A20. One resume (of roughly 45 pause/resume cycles in the end-to-end runs) was recorded about 7 s late**, by the periodic check instead of the `play` event, so a 3 s pause was stored as 10.5 s. Ten consecutive cycles in isolation were all recorded within 1 ms. Cause unknown. The end-to-end test reports this as a warning rather than hiding it; if it recurs it needs a closer look.
+
 ## B. Defects found and fixed during development (never in a release)
 
 | # | Defect | How it was found | Guard |

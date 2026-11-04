@@ -29,6 +29,7 @@ Run the check in [`INSTALL.md`](INSTALL.md#4-connect-the-browser-to-the-dashboar
 
 ## 3b. Video Details (0.7.0): limits and decisions
 
+- **Real Chrome and real YouTube: partly verified (v0.8.0).** An automated run drives the built extension in a real Chrome against real YouTube (play, pause, resume, seek, a stalled seek, an outage, a revoke); see [`MANUAL_TEST_CHECKLIST_EXTENSION.md`](MANUAL_TEST_CHECKLIST_EXTENSION.md). Ads, Shorts, several tabs, browser restart and the permission prompt are still hand-check items.
 - **Not yet verified on a real YouTube player by hand.** The recorder is tested against a scripted player and the page against a real browser with synthetic events; the checks that need a real player (ads, Shorts, scrubbing, throttled background tabs, crash recovery) are in [`MANUAL_TEST_CHECKLIST_VIDEO_DETAILS.md`](MANUAL_TEST_CHECKLIST_VIDEO_DETAILS.md).
 - **Timing is not sub-second.** Event times are the browser's clock at the instant the player fired the event; upload latency, background-tab throttling and service-worker suspension limit how fresh the page can be. Nothing claims better.
 - **Older history has no events.** Sessions from before 0.7 show *Summary only*. Nothing is reconstructed.

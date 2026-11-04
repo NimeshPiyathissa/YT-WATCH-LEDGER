@@ -67,7 +67,10 @@
     function observe(obs, ts, hint) {
       out = [];
       if (finished) return out;
-      const want = desiredState(obs), pos = Number.isFinite(obs.pos) ? obs.pos : lastPos;
+      let want = desiredState(obs); const pos = Number.isFinite(obs.pos) ? obs.pos : lastPos;
+      // A seek to somewhere that is not buffered can stay "seeking" for many seconds with nothing playing. After the same short
+      // debounce as any stall it is recorded as buffering, so that wait is not counted as playing time (found in real Chrome).
+      if (want === "playing" && obs.seeking) want = "buffering";
       if (!started) {
         if (want !== "playing") return out;
         started = true; rate = obs.rate > 0 ? obs.rate : 1; hidden = !!obs.hidden;

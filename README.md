@@ -168,7 +168,7 @@ A cinematic 16:9 (75 s) and a vertical 9:16 (56 s) overview are attached to the 
 | Upgrading and rolling back | [UPGRADING.md](docs/UPGRADING.md) |
 | Full behaviour reference | [FEATURES.md](docs/FEATURES.md) |
 | Known issues | [KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) |
-| Manual browser test lists | [general](docs/MANUAL_TEST_CHECKLIST.md), [Video Details](docs/MANUAL_TEST_CHECKLIST_VIDEO_DETAILS.md) |
+| Manual browser test lists | [general](docs/MANUAL_TEST_CHECKLIST.md), [Video Details](docs/MANUAL_TEST_CHECKLIST_VIDEO_DETAILS.md), [extension](docs/MANUAL_TEST_CHECKLIST_EXTENSION.md) |
 | Security | [SECURITY.md](SECURITY.md) |
 | Contributing, changelog | [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md) |
 | Background (academic origins) | [docs/project-notes/](docs/project-notes/SUBMISSION.md) |

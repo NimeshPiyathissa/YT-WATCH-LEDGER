@@ -156,7 +156,7 @@
       rec.heartbeat(now, o.pos);
       if (hint === "reconcile") safe(() => chrome.storage.local.set({ live_rec: rec.snapshot() }));
     }
-    if (o.paused === false && o.waiting && !settleT) settleT = setTimeout(() => { settleT = 0; handle("settle"); }, P.BUFFER_DEBOUNCE_MS + 50);
+    if (o.paused === false && (o.waiting || o.seeking) && !settleT) settleT = setTimeout(() => { settleT = 0; handle("settle"); }, P.BUFFER_DEBOUNCE_MS + 50);
 
     if (effPlaying) {
       pausedSince = 0; endedSince = 0;

@@ -6,11 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ### v0.8.0-rc.1 work in progress (Backup Manager and Security Center)
 #### Added
+- **Real-Chrome end-to-end test** (`WL_EXT_E2E=1 node --test server/test/ext-e2e.test.js`, `scripts/lib/chrome-ext.mjs`): the built extension in a temporary Chrome profile against real YouTube and a throwaway server. Guided manual list: `docs/MANUAL_TEST_CHECKLIST_EXTENSION.md`.
 - **Backup Manager.** *Data & backups -> Verify* (and `restore.js --inspect`) checks a backup without changing anything: integrity, same / older / newer release, and whether this server's `MASTER_KEY` can read it. `GET /api/system/backups`, `POST /api/system/backups/:name/verify` (audited). See `docs/BACKUP_RECOVERY.md`.
 - **Security Center** page and `GET /api/security/overview`: plain-language findings, where the owner is signed in, sign out everywhere else / everywhere, change password (`/api/auth/sessions`, `/sign-out-others`, `/sign-out-all`, `/password`). See `docs/SECURITY_CENTER.md`.
 - Audit log filters and paging (`?action=`, `?before=`, `?limit=`); failed sign-ins are audited; the audit log is capped by size as well as age.
 
 #### Fixed
+- A seek that was slow to finish was counted as playing time in the event-based totals (A18; found by driving real Chrome on real YouTube). Mirrored in all three copies of `playback.js`.
 - Several simultaneous dashboard requests refreshing with one cookie could sign the owner out (A7; now also reproduced and verified in headless Chrome).
 - Restore: refuses backups from a newer release or that this key cannot read; writes atomically (a failed copy leaves the live database untouched); the safety copy keeps un-merged write-ahead-log data; verifies the result. Crashed backups leave no permanent `.partial` files. Details in `BUG_FIX_REPORT.md` (A8-A12).
 - Expired owner sign-in tokens are deleted. Ending another browser no longer makes its retry look like theft (A14, B5).
