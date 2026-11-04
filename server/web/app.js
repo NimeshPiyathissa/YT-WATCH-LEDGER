@@ -14,11 +14,11 @@
   const toast = m => { const t = $("toast"); t.textContent = m; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3200); };
 
   /* ---- API: cookie session; one silent refresh on 401, then back to sign-in ---- */
-  async function refreshed() { const r = await fetch("/api/auth/refresh", { method: "POST", credentials: "same-origin" }); return r.ok; }
+  const refreshed = WLSession.createRefresher(async () => (await fetch("/api/auth/refresh", { method: "POST", credentials: "same-origin" })).ok); // one shared refresh: see session.js
   async function api(method, path, body, retry) {
     const gen = routeGen;
     const res = await fetch(path, { method, credentials: "same-origin", headers: body !== undefined ? { "Content-Type": "application/json" } : {}, body: body !== undefined ? JSON.stringify(body) : undefined });
-    if (res.status === 401 && retry !== false && path.indexOf("/api/auth/") !== 0) {
+    if (res.status === 401 && retry !== false && !/^\/api\/auth\/(login|refresh|logout)$/.test(path)) {
       if (await refreshed()) return api(method, path, body, false);
       location.hash = "#/login"; throw new Error("unauthorized");
     }
@@ -141,6 +141,7 @@
     if (h === "#/videos") return pageGuard(() => window.WLVideo.renderList(app))();
     if (h === "#/analytics") return pageGuard(() => window.WLAnalytics.render(app))();
     if (h === "#/health") return pageGuard(() => window.WLHealth.render(app))();
+    if (h === "#/security") return pageGuard(() => window.WLSecurity.render(app))();
     if (h === "#/history") return pageGuard(pageHistory)();
     const dm = h.match(/^#\/devices(?:\/(requests|sessions|pairing))?$/);
     if (dm) return pageGuard(pageDevices)(dm[1]);
@@ -657,7 +658,7 @@
       </div>
       <section class="card flush"><div class="card-head"><h3>Backups</h3><button class="btn btn-accent" id="bkNow" type="button">${ic("hard-drive")}Back up now</button></div>
         <div class="stack result-meta"><p class="muted">Database ${esc(U.fmtBytes(sys.dbBytes))} · keeping the newest ${sys.backupKeep}. Last backup: ${esc(sys.lastBackupAt ? U.fmtDateTime(sys.lastBackupAt) : "never")}. Backups hold encrypted records: restoring one needs the same <span class="mono">MASTER_KEY</span>. Restore steps are in <span class="mono">docs/OPERATIONS.md</span>.</p></div>
-        ${sys.backups.length ? `<table class="table rtable"><thead><tr><th>File</th><th>Created</th><th class="right">Size</th></tr></thead><tbody>${sys.backups.map(b => `<tr><td data-primary class="num cell-primary">${esc(b.name)}</td><td class="num" data-label="Created">${esc(U.fmtDateTime(b.createdAt))}</td><td class="num right" data-label="Size">${esc(U.fmtBytes(b.size))}</td></tr>`).join("")}</tbody></table>` : empty("hard-drive", "No backups yet", "Use Back up now to take the first one.")}</section>
+        ${sys.backups.length ? `<table class="table rtable"><thead><tr><th>File</th><th>Created</th><th class="right">Size</th><th class="right">Check</th></tr></thead><tbody>${sys.backups.map(b => `<tr><td data-primary class="num cell-primary">${esc(b.name)}</td><td class="num" data-label="Created">${esc(U.fmtDateTime(b.createdAt))}</td><td class="num right" data-label="Size">${esc(U.fmtBytes(b.size))}</td><td class="right" data-label="Check"><button class="btn compact" type="button" data-verify="${esc(b.name)}">Verify</button></td></tr>`).join("")}</tbody></table><div class="stack result-meta" id="bkVerify" role="status" aria-live="polite" hidden></div>` : empty("hard-drive", "No backups yet", "Use Back up now to take the first one.")}</section>
       <section class="card danger-zone stack"><div class="card-head"><h3>Delete synced data</h3></div><p class="muted">Permanently removes sessions from this server. This cannot be undone; restore a backup if you change your mind.</p>
         <div class="filters"><label class="field">Device${deviceSelect("xDev", "all")}</label><label class="field">From<input class="input" type="date" id="xFrom" /></label><label class="field">To<input class="input" type="date" id="xTo" /></label>
           <label class="field">Type DELETE to confirm<input class="input" id="xOk" autocomplete="off" /></label></div>
@@ -668,6 +669,15 @@
     $("exJson").onclick = guarded(() => download("/api/export?format=json", "watch-history.json"));
     $("retGo").onclick = guarded(async () => { const r = await api("PUT", "/api/settings", { server_retention_days: Number($("retSel").value) }); toast(r.removed ? `Retention applied. ${r.removed} old sessions removed.` : "Retention applied."); });
     $("bkNow").onclick = guarded(async () => { $("bkNow").disabled = true; try { await api("POST", "/api/system/backup"); toast("Backup created."); } finally { await pageData(); } });
+    document.querySelectorAll("[data-verify]").forEach(btn => { btn.onclick = guarded(async () => {
+      const name = btn.getAttribute("data-verify"), box = $("bkVerify"); btn.disabled = true; box.hidden = false; box.textContent = "Checking " + name + "…";
+      try {
+        const v = await api("POST", `/api/system/backups/${encodeURIComponent(name)}/verify`);
+        const schema = { current: "same release as this server", older: "older release; " + v.schema.missing.length + " upgrade step(s) run at start", newer: "made by a NEWER release; cannot be restored here", unknown: "no upgrade history" }[v.schema.state];
+        const key = v.keyOk === true ? "readable with this server's key" : v.keyOk === false ? "NOT readable with this server's key" : "key not checked (no encrypted records yet)";
+        box.innerHTML = `<p><b>${esc(name)}</b>: ${v.restorable ? pill({ cls: "on", text: "Can be restored" }) : pill({ cls: "bad", text: "Do not restore" })}</p><p class="muted">Integrity ${v.integrity ? "passed" : "FAILED"} · ${esc(schema)} · ${esc(key)}${v.counts ? " · " + v.counts.devices + " device(s), " + v.counts.sessions + " session(s)" : ""}.</p><p class="caption mono">SHA-256 ${esc(v.sha256 || "")}</p>${v.problems.length ? `<p class="muted">${v.problems.map(esc).join("; ")}</p>` : ""}`;
+      } finally { btn.disabled = false; }
+    }); });
     $("xGo").onclick = guarded(async () => {
       const bad = m => { $("xErr").textContent = m; $("xErr").hidden = false; };
       if ($("xOk").value !== "DELETE") return bad("Type DELETE (capitals) to confirm.");

@@ -30,7 +30,7 @@ export async function resetOwnerPassword(db, password) {
   const hash = await argon2.hash(password);
   db.transaction(() => {
     db.prepare("UPDATE admins SET pw_hash=? WHERE id=?").run(hash, owner.id);
-    db.prepare("UPDATE refresh_tokens SET revoked=1 WHERE admin_id=?").run(owner.id); // every existing session is signed out
+    db.prepare("UPDATE refresh_tokens SET revoked=2 WHERE admin_id=? AND revoked=0").run(owner.id); // every existing session is signed out
   })();
   return owner.id;
 }

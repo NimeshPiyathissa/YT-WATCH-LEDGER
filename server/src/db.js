@@ -14,6 +14,9 @@ export function openDb(file = ":memory:") {
   return db;
 }
 
+// The migration file names this release knows, in order. A backup that records a name not in this list came from a newer release.
+export function knownMigrations() { return fs.readdirSync(MIGRATIONS).filter(f => f.endsWith(".sql")).sort(); }
+
 // Applies any unapplied migrations/*.sql in filename order; returns the names applied.
 // opts.upTo (a file name) stops after that migration: the tests use it to build a database exactly as an older release left it.
 export function migrate(db, opts = {}) {

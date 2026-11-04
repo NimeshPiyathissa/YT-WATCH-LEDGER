@@ -1,9 +1,10 @@
+import path from "node:path";
 import fs from "node:fs";
 import { decryptJSON } from "../lib/crypto.js";
 import { summarize } from "../lib/aggregate.js";
 import { audit } from "../lib/helpers.js";
 import { recomputeVideo, getGlobalRetention, setGlobalRetention, purgeAll } from "../lib/retention.js";
-import { createBackup, listBackups } from "../lib/backup.js";
+import { createBackup, listBackups, inspectBackup, isBackupName } from "../lib/backup.js";
 import pb from "../lib/playback.cjs";
 import { deleteVideoEvents } from "../lib/videoEvents.js";
 
@@ -119,6 +120,18 @@ const CSV_COLS = ["device", "sessionId", "videoId", "url", "title", "channel", "
     let dbBytes = 0; try { dbBytes = config.dbPath && config.dbPath !== ":memory:" ? fs.statSync(config.dbPath).size : 0; } catch { /* ignore */ }
     const backups = listBackups(config.backupDir);
     return { serverTime: Date.now(), dbBytes, backups: backups.slice(0, 10), lastBackupAt: backups[0] ? backups[0].createdAt : null, backupKeep: config.backupKeep };
+  });
+  // Backup Manager: every backup the server holds, and an on-demand check of one (integrity, release compatibility, key). Read-only:
+  // restoring replaces the live database, so it stays an offline command (scripts/restore.sh) and is never offered over HTTP.
+  app.get("/api/system/backups", () => ({ dir: path.basename(config.backupDir), keep: config.backupKeep, items: listBackups(config.backupDir) }));
+  app.post("/api/system/backups/:name/verify", (req, reply) => {
+    const name = req.params.name;
+    if (!isBackupName(name)) return reply.code(400).send({ error: "bad_name" }); // also rules out any path separator
+    const file = path.join(config.backupDir, name);
+    if (!fs.existsSync(file)) return reply.code(404).send({ error: "not_found" });
+    const info = inspectBackup(file);
+    audit(db, req.admin.id, null, "backup_verified", req.ip, { name, restorable: info.restorable, schema: info.schema.state, keyOk: info.keyOk });
+    return info;
   });
   app.post("/api/system/backup", async (req, reply) => {
     try {

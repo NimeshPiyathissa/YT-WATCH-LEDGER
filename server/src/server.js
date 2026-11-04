@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { openDb, migrate } from "./db.js";
 import { buildApp } from "./app.js";
 import { purgeAll, expirePending, purgeHousekeeping } from "./lib/retention.js";
+import { pruneAudit, purgeExpiredTokens } from "./lib/security.js";
 import { createBackup, listBackups } from "./lib/backup.js";
 
 const env = process.env;
@@ -32,7 +33,7 @@ process.on("unhandledRejection", e => console.error("unhandled rejection:", e));
 process.on("uncaughtException", e => { console.error("uncaught exception:", e); process.exit(1); });
 
 // Hourly housekeeping: retention, never-approved pairing requests, expired codes, old audit entries.
-const housekeeping = () => { try { purgeAll(db); expirePending(db); purgeHousekeeping(db); } catch (e) { console.error("housekeeping failed", e); } };
+const housekeeping = () => { try { purgeAll(db); expirePending(db); purgeHousekeeping(db); pruneAudit(db); purgeExpiredTokens(db); } catch (e) { console.error("housekeeping failed", e); } };
 housekeeping();
 setInterval(housekeeping, 60 * 60 * 1000).unref();
 

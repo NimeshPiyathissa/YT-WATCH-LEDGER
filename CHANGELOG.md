@@ -4,6 +4,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased] - v0.8.0 development (branch `develop/v0.8.0`)
 
+### v0.8.0-rc.1 work in progress (Backup Manager and Security Center)
+#### Added
+- **Backup Manager.** *Data & backups -> Verify* (and `restore.js --inspect`) checks a backup without changing anything: integrity, same / older / newer release, and whether this server's `MASTER_KEY` can read it. `GET /api/system/backups`, `POST /api/system/backups/:name/verify` (audited). See `docs/BACKUP_RECOVERY.md`.
+- **Security Center** page and `GET /api/security/overview`: plain-language findings, where the owner is signed in, sign out everywhere else / everywhere, change password (`/api/auth/sessions`, `/sign-out-others`, `/sign-out-all`, `/password`). See `docs/SECURITY_CENTER.md`.
+- Audit log filters and paging (`?action=`, `?before=`, `?limit=`); failed sign-ins are audited; the audit log is capped by size as well as age.
+
+#### Fixed
+- Several simultaneous dashboard requests refreshing with one cookie could sign the owner out (A7; now also reproduced and verified in headless Chrome).
+- Restore: refuses backups from a newer release or that this key cannot read; writes atomically (a failed copy leaves the live database untouched); the safety copy keeps un-merged write-ahead-log data; verifies the result. Crashed backups leave no permanent `.partial` files. Details in `BUG_FIX_REPORT.md` (A8-A12).
+- Expired owner sign-in tokens are deleted. Ending another browser no longer makes its retry look like theft (A14, B5).
+
+#### Not verified
+The installed extension on a live YouTube page, a real VPS, and a real full disk during restore. See `BUG_FIX_REPORT.md` section D.
+
 ### v0.8.0-beta.1 (this milestone; includes everything under alpha)
 #### Added
 - **Device Control Center** on every device page: Diagnostics (plain checks with fixes), Activity (merged history), Permissions (consent as reported by the device; the owner cannot change it). Confirmation dialogs for destructive actions.

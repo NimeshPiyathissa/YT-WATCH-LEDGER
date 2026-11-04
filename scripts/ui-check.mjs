@@ -52,7 +52,7 @@ async function goto(url) {
 }
 
 const PAGES = [["overview", "#/overview", "Overview"], ["analytics", "#/analytics", "Analytics"], ["history", "#/history", "History"], ["videos", "#/videos", "Videos"],
-  ["devices", "#/devices", "Devices"], ["health", "#/health", "Health Center"], ["data", "#/data", null], ["audit", "#/audit", null]];
+  ["devices", "#/devices", "Devices"], ["health", "#/health", "Health Center"], ["data", "#/data", null], ["security", "#/security", "Security Center"], ["audit", "#/audit", null]];
 const SIZES = [["phone", 390, 800, true], ["tablet", 820, 1100, false], ["desktop", 1440, 900, false]];
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log((ok ? "  ok   " : "  FAIL ") + name + (detail ? "  (" + detail + ")" : "")); };
@@ -92,6 +92,18 @@ try {
   await sleep(2500);
   const last = await ev(`(document.querySelector('#app h1') || {}).textContent || ''`);
   check("fast navigation: the last page clicked is the page shown", last.trim() === "Health Center", last.trim());
+
+  // Expired access cookie + several requests at once (BUG_FIX_REPORT A7). The page must refresh ONCE, every request must then succeed,
+  // and the owner must still be signed in. (Refreshing twice with one cookie makes the server treat it as stolen and end every session.)
+  await goto(URL_ + "/#/health");
+  await sleep(1500);
+  await send("Network.deleteCookies", { name: "at", url: URL_ + "/" });
+  const burst = await ev(`(async () => { const paths = ['/api/devices', '/api/system', '/api/settings', '/api/audit', '/api/security/overview', '/api/system/backups'];
+    const r = await Promise.allSettled(paths.map(p => window.WL.api('GET', p))); return { ok: r.filter(x => x.status === 'fulfilled').length, of: paths.length, hash: location.hash, errs: r.filter(x => x.status === 'rejected').map(x => String(x.reason && x.reason.message)) }; })()`);
+  check("expired access cookie, six simultaneous requests: all succeed", burst.ok === burst.of, `${burst.ok}/${burst.of} ${burst.errs.join(",")}`);
+  check("expired access cookie, six simultaneous requests: still signed in", burst.hash !== "#/login", burst.hash);
+  const after = await ev(`window.WL.api('GET', '/api/devices').then(() => 'ok', e => String(e.message))`);
+  check("expired access cookie: the session still works afterwards", after === "ok", after);
 } catch (e) {
   check("run", false, e.message);
 } finally {
