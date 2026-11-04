@@ -17,6 +17,8 @@ Optional settings in `.env` (all have safe defaults):
 | `ENROLL_RATE_MAX` | `20` | Pairing attempts per address per hour. |
 | `TRUST_PROXY` | `false` | **Set to `true` behind a reverse proxy.** Otherwise every request appears to come from the proxy's address, so one attacker's failed attempts would lock out everybody, and per-address limits would be shared. |
 
+These can also be changed from the dashboard (**Settings**, see [`SETTINGS.md`](SETTINGS.md)); a value saved there overrides the file and applies without a restart.
+
 The pairing lockout is held in memory: restarting the server clears it. The per-hour rate limit is separate.
 
 ## Video Details

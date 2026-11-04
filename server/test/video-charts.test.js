@@ -103,9 +103,9 @@ test("the page's assets obey the CSP (no inline style, script or handler) and ar
 
 test("v0.8 dashboard assets (ui.css, analytics.js, health.js) are wired in, load before app.js, and obey the CSP", () => {
   const html = fs.readFileSync(path.join(WEB, "index.html"), "utf8");
-  for (const f of ["ui.css", "analytics.js", "health.js", "security.js", "notifications.js", "session.js", "device-center.js"]) assert.ok(html.includes(f), f + " is referenced by index.html");
+  for (const f of ["ui.css", "analytics.js", "health.js", "security.js", "notifications.js", "settings-studio.js", "session.js", "device-center.js"]) assert.ok(html.includes(f), f + " is referenced by index.html");
   assert.ok(html.indexOf("analytics.js") < html.indexOf("app.js") && html.indexOf("health.js") < html.indexOf("app.js"), "page modules load before app.js");
-  for (const f of ["analytics.js", "health.js", "security.js", "notifications.js", "session.js", "device-center.js", "app.js", "video.js"]) {
+  for (const f of ["analytics.js", "health.js", "security.js", "notifications.js", "settings-studio.js", "session.js", "device-center.js", "app.js", "video.js"]) {
     const src = fs.readFileSync(path.join(WEB, f), "utf8");
     assert.equal(/\sstyle="|\sstyle=\\"|onclick=|onerror=|onload=|javascript:|eval\(|new Function|document\.write/.test(src), false, f);
   }

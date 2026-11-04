@@ -139,3 +139,30 @@ body { background-image: var(--glow); background-repeat: no-repeat; background-a
 .notif-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .badge.bad { background: var(--bad, #d92d20); color: #fff; }
 @media (max-width: 640px) { .notif { flex-direction: column; } .notif-actions { justify-content: flex-start; } }
+
+/* Settings Studio */
+.studio { display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
+.studio-nav { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.studio-link { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line, rgba(128,128,128,.25)); background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.studio-link:hover, .studio-link:focus-visible { border-color: var(--accent, #4f8cff); }
+.studio-card { scroll-margin-top: 16px; }
+.set-rows { display: flex; flex-direction: column; }
+.set-row { display: flex; gap: 20px; justify-content: space-between; align-items: flex-start; padding: 16px 0; border-top: 1px solid var(--line, rgba(128,128,128,.2)); }
+.set-row:first-child { border-top: 0; }
+.set-text { min-width: 0; flex: 1; }
+.set-text p { margin: 4px 0 8px; max-width: 62ch; }
+.set-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.set-control { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
+.set-num { display: flex; align-items: center; gap: 8px; }
+.set-num .input { width: 7.5rem; }
+.set-ro { padding: 4px 8px; border-radius: 6px; background: rgba(128,128,128,.12); overflow-wrap: anywhere; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--accent, #4f8cff); font: inherit; text-decoration: underline; cursor: pointer; }
+.savebar { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; padding: 12px 14px; border-radius: 10px; background: color-mix(in srgb, var(--accent, #4f8cff) 10%, transparent); border: 1px solid color-mix(in srgb, var(--accent, #4f8cff) 35%, transparent); }
+.savebar[hidden] { display: none; }
+@media (min-width: 960px) {
+  .studio { grid-template-columns: 220px minmax(0, 1fr); }
+  .studio-nav { position: sticky; top: 16px; flex-direction: column; overflow: visible; }
+  .studio-link { border-radius: 10px; }
+}
+@media (max-width: 640px) { .set-row { flex-direction: column; gap: 10px; } .set-control { width: 100%; } }
+.compact-tables .table td, .compact-tables .table th { padding-top: 4px; padding-bottom: 4px; }

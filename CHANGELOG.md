@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ### v0.8.0-rc.1 work in progress (Backup Manager and Security Center)
 #### Added
+- **Settings Studio** (`#/settings`): retention, audit retention, backup schedule and keep count, pairing lifetime and lock-out, notification thresholds, and the owner's preferences (landing page, compact tables), all validated by the server, applied without a restart and audited with old and new values. Shortening retention shows how many sessions would be deleted and needs that number confirmed. Settings that need a restart are listed read-only. See `docs/SETTINGS.md`.
 - **Notification Center** (in the dashboard only; nothing is sent anywhere): eight configurable kinds, thresholds, a sidebar count, Active and History views, mark read and dismiss, retention. Migration `008_notifications.sql`. See `docs/NOTIFICATIONS.md`.
 - **Real-Chrome end-to-end test** (`WL_EXT_E2E=1 node --test server/test/ext-e2e.test.js`, `scripts/lib/chrome-ext.mjs`): the built extension in a temporary Chrome profile against real YouTube and a throwaway server. Guided manual list: `docs/MANUAL_TEST_CHECKLIST_EXTENSION.md`.
 - **Backup Manager.** *Data & backups -> Verify* (and `restore.js --inspect`) checks a backup without changing anything: integrity, same / older / newer release, and whether this server's `MASTER_KEY` can read it. `GET /api/system/backups`, `POST /api/system/backups/:name/verify` (audited). See `docs/BACKUP_RECOVERY.md`.
@@ -13,6 +14,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 - Audit log filters and paging (`?action=`, `?before=`, `?limit=`); failed sign-ins are audited; the audit log is capped by size as well as age.
 
 #### Fixed
+- An invalid `BACKUP_KEEP` (for example `abc`) deleted every backup including the new one, and a backup interval that was not a number silently switched scheduled backups off (A22). Bad environment values are now ignored, reported and replaced by the default.
+- The Data page changed the retention window and deleted data immediately, without showing how much; the control now lives in Settings Studio with a count and a confirmation (A23). The old API route is unchanged.
+- Settings Studio overwrote the backup keep count and interval a caller gave the app with the built-in defaults; an explicit owner or environment value still wins, otherwise the caller's value stands (A24).
 - The Security page's sidebar entry and empty state used an icon that does not exist (an unknown name draws a warning symbol); a test now checks every icon name the dashboard and the extension use (A21).
 - The end of a viewing could be lost with nothing left to recover from: the saved recorder state is now kept until the service worker has stored the end event, duplicate end events are dropped, and recovery never closes a viewing twice (A19; measured in real Chrome).
 - A seek that was slow to finish was counted as playing time in the event-based totals (A18; found by driving real Chrome on real YouTube). Mirrored in all three copies of `playback.js`.

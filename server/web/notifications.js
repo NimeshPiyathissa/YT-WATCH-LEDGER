@@ -55,8 +55,10 @@
         const [list, prefs] = await Promise.all([WL.api("GET", "/api/notifications?status=" + (view === "active" ? "active" : "all") + "&limit=100"), WL.api("GET", "/api/notifications/preferences")]);
         if (mine !== seq || !document.body.contains(box)) return;
         box.innerHTML = `<div class="row"><button class="btn${view === "active" ? " btn-accent" : ""}" type="button" id="ntVActive">Active</button><button class="btn${view === "all" ? " btn-accent" : ""}" type="button" id="ntVAll">History</button></div>
-          <section class="card flush">${list.items.length ? `<ul class="notifs">${list.items.map(item).join("")}</ul>` : WL.empty("bell", view === "active" ? "Nothing needs your attention" : "No notifications yet", view === "active" ? "New problems will appear here and in the sidebar badge." : "")}</section>` + prefsForm(prefs, list.kinds);
-        wire(load, prefs); refreshBadge();
+          <section class="card flush">${list.items.length ? `<ul class="notifs">${list.items.map(item).join("")}</ul>` : WL.empty("bell", view === "active" ? "Nothing needs your attention" : "No notifications yet", view === "active" ? "New problems will appear here and in the sidebar badge." : "")}</section>` + `<div id="npMount"></div>`;
+        mountPrefs($("npMount"), { prefs, kinds: list.kinds, onSaved: load });
+        
+        wire(load); refreshBadge();
       } catch (e) {
         if (e.message === "unauthorized" || e.message === "navigated" || mine !== seq) return;
         box.innerHTML = `<section class="card">${WL.empty("bell", "Notifications could not load", WL.errText(e), `<button class="btn btn-accent" type="button" id="ntRetry">${ic("refresh-cw")}Try again</button>`, "bad")}</section>`;
@@ -68,11 +70,21 @@
     await load();
   }
 
-  function wire(reload, prefs) {
+  function wire(reload) {
     $("ntVActive").onclick = () => { view = "active"; reload(); };
     $("ntVAll").onclick = () => { view = "all"; reload(); };
     document.querySelectorAll("[data-read]").forEach(b => { b.onclick = WL.guarded(async () => { await WL.api("POST", `/api/notifications/${encodeURIComponent(b.getAttribute("data-read"))}/read`, {}); await reload(); }); });
     document.querySelectorAll("[data-dismiss]").forEach(b => { b.onclick = WL.guarded(async () => { await WL.api("POST", `/api/notifications/${encodeURIComponent(b.getAttribute("data-dismiss"))}/dismiss`, {}); await reload(); }); });
+  }
+
+
+  // The preferences form, usable on its own page or inside Settings Studio. Saving goes through the same API either way.
+  async function mountPrefs(box, { prefs, kinds, onSaved } = {}) {
+    if (!prefs || !kinds) {
+      const [p, l] = await Promise.all([WL.api("GET", "/api/notifications/preferences"), WL.api("GET", "/api/notifications?limit=1")]);
+      prefs = p; kinds = l.kinds;
+    }
+    box.innerHTML = prefsForm(prefs, kinds);
     $("npForm").onsubmit = WL.guarded(async ev => {
       ev.preventDefault();
       const bad = m => { $("npErr").textContent = m; $("npErr").hidden = false; };
@@ -83,10 +95,10 @@
       $("npSave").disabled = true;
       try {
         await WL.api("PUT", "/api/notifications/preferences", { enabled: $("npEnabled").checked, kinds, retentionDays: Number($("npRet").value) });
-        WL.toast("Notification settings saved."); await reload();
+        WL.toast("Notification settings saved."); if (onSaved) await onSaved();
       } catch (e) { bad(e.status === 400 ? "One of the numbers is outside its allowed range." : WL.errText(e)); } finally { const s = $("npSave"); if (s) s.disabled = false; }
     });
   }
 
-  window.WLNotifications = { render, startBadge, refreshBadge };
+  window.WLNotifications = { render, startBadge, refreshBadge, mountPrefs };
 })();

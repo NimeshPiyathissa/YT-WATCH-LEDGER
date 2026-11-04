@@ -129,6 +129,27 @@ Nothing in this file claims real-browser or real-VPS testing that was not done; 
 - **Attempts to reproduce:** 10 cycles on real YouTube (all within 1 ms), then 100 cycles at 0.9 s / 1.1 s on a real `<video>` in real Chrome with the real content script and extension (a local stand-in page, `scripts/lib/mock-youtube.mjs`): **all 100 recorded within 50 ms, reason "user"**. A further 30-cycle run on real YouTube could not be completed because YouTube stopped serving the player to the automated browser (every video stuck at `readyState 0`, later in the day).
 - **Status:** open. No code was changed. `server/test/ext-e2e.test.js` now has a 40-cycle accuracy test on the stand-in page (all 40 pass) and still reports an overlong pause on real YouTube as a warning, so it will show up if it recurs.
 
+### A22. An invalid `BACKUP_KEEP` deleted every backup
+- **Where:** `server/src/lib/backup.js` (`createBackup`) with `server/src/server.js` (`Number(env.BACKUP_KEEP || 14)`).
+- **Found while auditing the existing settings.** `BACKUP_KEEP=abc` becomes `NaN`; `slice(Math.max(NaN, 1))` is `slice(NaN)`, which starts at 0, so pruning removed **every** backup, including the one just written, and the call then crashed with `ENOENT` (the new file was already gone).
+- **Confirmed:** by running the old code with a `NaN` keep count: all backups deleted, the backup reported as failed.
+- **Fix:** the keep count is sanitised where it is used (anything that is not a finite number becomes 14, fractions round down, at least 1, at most 365), and Settings Studio only accepts whole numbers in range. The same audit found that a non-numeric `BACKUP_INTERVAL_HOURS` made `backupEveryMs` `NaN`, so scheduled backups were **silently off** with no message; environment values are now validated, ignored and reported (log line at start, and a warning on the Settings page).
+- **Guard:** `server/test/settings-studio.test.js` (A22, `resolveInt`, "a bad value in the server's environment...").
+
+### A23. The Data page deleted data immediately when the retention window was shortened
+- **Where:** `server/web/app.js` (Data & backups, "Retention on the server") and `PUT /api/settings`.
+- **Confirmed by reading the code and the old UI:** choosing "30 days" and pressing Apply removed every older session at once (`purgeAll`) and only reported the number afterwards, with no confirmation. Backups still held the data, but a mis-click on a dropdown was an irreversible change on the live server.
+- **Fix:** the control moved to Settings Studio: the server counts what would be removed (`GET /api/settings/retention-preview`), the page shows it in a confirmation, and `PUT /api/settings/studio` refuses with `409` unless the exact count is confirmed. The Data page now links to Settings. The old `PUT /api/settings` route is unchanged so existing callers keep working (it still deletes immediately).
+- **Guard:** `settings-studio.test.js` (preview equals a real purge; 409 until the exact number is confirmed; a stale number is refused) and the click-through test in `ui-interact.test.js` (the dialog names the count; cancelling deletes nothing; confirming removes exactly those sessions).
+
+### A24. Settings Studio overwrote the backup settings a caller passed to the app (regression, caught by the existing suite)
+- **Where:** `server/src/lib/settings.js` (`applyRuntime`), called from `buildApp`.
+- **Found by:** the full server suite after the power-outage recovery: `history.test.js` "on-demand backup ... pruning to the configured count" kept 5 backups instead of 3.
+- **Cause:** `applyRuntime` always wrote the built-in default (14 backups, 24 h) into `config`, discarding `backupKeep` / `backupIntervalHours` given by the caller. Introduced by the uncommitted Settings Studio work; never in a commit or release.
+- **Fix:** the caller's original values are remembered; the owner's saved value or a valid environment value wins, otherwise the caller's value stands, and only then the built-in default. "Use the server default" therefore returns to the caller's value. A22 (bad `BACKUP_KEEP` handling) and A23 (confirmed retention changes) are unchanged.
+- **Guard:** `settings-studio.test.js` (A24: caller value stands; owner value wins at once; reset returns to the caller's value; environment beats the caller; a bare config gets 14 / 24).
+- **Verified after the fix (2026-11-04):** server suite 356 tests, 354 pass, 0 fail, 2 skipped (the two real-Chrome-on-YouTube tests, which need `WL_EXT_E2E=1` and the internet); extension tests 70 of 70; `scripts/ui-check.mjs` 98 passed, 0 failed against a throwaway server with a temporary database.
+
 ### A21. The Security page asked for an icon that does not exist
 - **Where:** `server/web/index.html`, `server/web/security.js` (my own work from the Security Center milestone, never released).
 - **Confirmed:** the new `server/test/icons.test.js` listed `shield` as missing. An unknown icon name does not draw nothing: it draws the `circle-alert` fallback, so the sidebar entry showed a warning symbol.

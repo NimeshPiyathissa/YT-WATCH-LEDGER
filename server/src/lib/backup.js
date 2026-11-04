@@ -100,7 +100,10 @@ export async function createBackup(db, dir, keep = 14, now = new Date()) {
     try { fs.chmodSync(dest, 0o600); } catch { /* not supported on every platform */ }
   } catch (e) { for (const x of ["", "-wal", "-shm"]) fs.rmSync(tmp + x, { force: true }); throw e; }
   const all = listBackups(dir);
-  for (const old of all.slice(Math.max(keep, 1))) fs.rmSync(path.join(dir, old.name), { force: true });
+  // `keep` can come from an environment variable. Anything that is not a usable number (NaN made slice() start at 0 and deleted EVERY
+  // backup, including the one just written) falls back to the default; fractions round down; at least one backup is always kept.
+  const k = Number.isFinite(Number(keep)) ? Math.min(365, Math.max(1, Math.floor(Number(keep)))) : 14;
+  for (const old of all.slice(k)) fs.rmSync(path.join(dir, old.name), { force: true });
   return { name, size: fs.statSync(dest).size };
 }
 

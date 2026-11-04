@@ -5,6 +5,7 @@ import { summarize } from "../lib/aggregate.js";
 import { audit } from "../lib/helpers.js";
 import { recomputeVideo, getGlobalRetention, setGlobalRetention, purgeAll } from "../lib/retention.js";
 import { createBackup, listBackups, inspectBackup, isBackupName } from "../lib/backup.js";
+import { readSettings } from "../lib/settings.js";
 import pb from "../lib/playback.cjs";
 import { deleteVideoEvents } from "../lib/videoEvents.js";
 
@@ -105,7 +106,7 @@ const CSV_COLS = ["device", "sessionId", "videoId", "url", "title", "channel", "
   });
 
   /* ---- owner settings ---- */
-  app.get("/api/settings", () => ({ server_retention_days: getGlobalRetention(db) }));
+  app.get("/api/settings", () => { const v = readSettings(db).values; return { server_retention_days: getGlobalRetention(db), default_page: v.default_page, compact_tables: v.compact_tables }; });
   app.put("/api/settings", (req, reply) => {
     const d = req.body?.server_retention_days;
     if (!Number.isInteger(d) || d < 0 || d > 3650) return reply.code(400).send({ error: "bad_retention" });

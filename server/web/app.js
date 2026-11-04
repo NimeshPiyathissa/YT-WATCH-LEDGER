@@ -78,7 +78,7 @@
   };
   const clock = ms => { const t = Math.max(0, Math.floor((ms || 0) / 1000)), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), x = t % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); };
   // The small surface the Video Details module (video.js) uses; everything else in this file stays private.
-  window.WL = { api, download, toast, errText, refreshed, guarded, confirmDialog: (...a) => confirmDialog(...a), empty: (...a) => empty(...a), head: (...a) => head(...a), chip: (...a) => chip(...a), loadDevices: () => loadDevices(), devices: () => devices };
+  window.WL = { applyPrefs, api, download, toast, errText, refreshed, guarded, confirmDialog: (...a) => confirmDialog(...a), empty: (...a) => empty(...a), head: (...a) => head(...a), chip: (...a) => chip(...a), loadDevices: () => loadDevices(), devices: () => devices };
   async function loadDevices() {
     devices = (await api("GET", "/api/devices")).slice().sort((a, b) => a.enrolled_at - b.enrolled_at);
     // the sidebar badge counts devices awaiting approval plus session deletion requests awaiting a decision
@@ -123,7 +123,7 @@
   function route() {
     routeGen++;
     clearInterval(timer); timer = null; clearInterval(cpTimer); cpTimer = null; closeEvents(); window.WLVideo.dispose(); window.WLHealth.dispose(); window.WLDeviceCenter.dispose();
-    const h = location.hash || "#/overview";
+    const h = location.hash || "#/overview"; // (a first visit without a link is sent to the owner's chosen page before route() runs; see the end of this file)
     const login = h === "#/login";
     $("login").hidden = !login; $("shell").hidden = login;
     closeNav(false);
@@ -143,6 +143,7 @@
     if (h === "#/health") return pageGuard(() => window.WLHealth.render(app))();
     if (h === "#/security") return pageGuard(() => window.WLSecurity.render(app))();
     if (h === "#/notifications") return pageGuard(() => window.WLNotifications.render(app))();
+    if (h === "#/settings") return pageGuard(() => window.WLSettings.render(app))();
     if (h === "#/history") return pageGuard(pageHistory)();
     const dm = h.match(/^#\/devices(?:\/(requests|sessions|pairing))?$/);
     if (dm) return pageGuard(pageDevices)(dm[1]);
@@ -649,13 +650,13 @@
   /* ---- data: export, server-side deletion, retention, backups ---- */
   async function pageData() {
     await loadDevices();
-    const [sys, set] = await Promise.all([api("GET", "/api/system"), api("GET", "/api/settings")]);
+    const sys = await api("GET", "/api/system");
     app.innerHTML = head("Data &amp; backups", "Everything here is about the copy stored on this server. Each laptop keeps its own local copy, which you control from the extension or from a device's Controls page.") + `
       <div class="grid g2">
         <section class="card stack"><div class="card-head"><h3>Export</h3></div><p class="muted">Download all synced history from every device.</p>
           <div class="row"><button class="btn" id="exCsv" type="button">${ic("download")}Download CSV</button><button class="btn" id="exJson" type="button">${ic("download")}Download JSON</button></div></section>
-        <section class="card stack"><div class="card-head"><h3>Retention on the server</h3></div><p class="muted">Older sessions are removed automatically. Applies immediately.</p>
-          <div class="row"><select class="input compact" id="retSel" aria-label="Server retention">${[[0, "Keep forever"], [30, "30 days"], [90, "90 days"], [180, "180 days"], [365, "1 year"], [730, "2 years"]].map(([v, t]) => `<option value="${v}">${t}</option>`).join("")}</select><button class="btn" id="retGo" type="button">Apply</button></div></section>
+        <section class="card stack"><div class="card-head"><h3>Retention on the server</h3></div><p class="muted">How long the server keeps history is set in <a href="#/settings">Settings</a>, where you are shown how many sessions a shorter window would delete before anything is removed.</p>
+          <div><a class="btn" href="#/settings">${ic("settings")}Open Settings</a></div></section>
       </div>
       <section class="card flush"><div class="card-head"><h3>Backups</h3><button class="btn btn-accent" id="bkNow" type="button">${ic("hard-drive")}Back up now</button></div>
         <div class="stack result-meta"><p class="muted">Database ${esc(U.fmtBytes(sys.dbBytes))} · keeping the newest ${sys.backupKeep}. Last backup: ${esc(sys.lastBackupAt ? U.fmtDateTime(sys.lastBackupAt) : "never")}. Backups hold encrypted records: restoring one needs the same <span class="mono">MASTER_KEY</span>. Restore steps are in <span class="mono">docs/OPERATIONS.md</span>.</p></div>
@@ -665,10 +666,8 @@
           <label class="field">Type DELETE to confirm<input class="input" id="xOk" autocomplete="off" /></label></div>
         <div><button class="btn btn-danger" id="xGo" type="button">${ic("trash-2")}Delete matching data</button></div>
         <p class="caption">Leave the dates empty to delete everything for the chosen device(s).</p><div class="err" id="xErr" role="alert" hidden></div></section>`;
-    $("retSel").value = String(set.server_retention_days || 0);
     $("exCsv").onclick = guarded(() => download("/api/export?format=csv", "watch-history.csv"));
     $("exJson").onclick = guarded(() => download("/api/export?format=json", "watch-history.json"));
-    $("retGo").onclick = guarded(async () => { const r = await api("PUT", "/api/settings", { server_retention_days: Number($("retSel").value) }); toast(r.removed ? `Retention applied. ${r.removed} old sessions removed.` : "Retention applied."); });
     $("bkNow").onclick = guarded(async () => { $("bkNow").disabled = true; try { await api("POST", "/api/system/backup"); toast("Backup created."); } finally { await pageData(); } });
     document.querySelectorAll("[data-verify]").forEach(btn => { btn.onclick = guarded(async () => {
       const name = btn.getAttribute("data-verify"), box = $("bkVerify"); btn.disabled = true; box.hidden = false; box.textContent = "Checking " + name + "…";
@@ -705,6 +704,20 @@
       ${log.map(r => `<tr><td data-primary class="when">${esc(U.fmtDateTime(r.created_at))}</td><td data-label="Action"><span class="act ${actClass(r.action)}">${esc(r.action)}</span>${r.detail ? `<pre class="detail">${esc(fmtDetail(r.detail))}</pre>` : ""}</td><td data-label="Device">${esc(name(r.device_id))}</td><td class="num" data-label="IP">${esc(r.ip || "—")}</td></tr>`).join("")}</tbody></table>` : empty("scroll-text", "Nothing recorded yet", "Sign-ins, pairing, exports and deletions are listed here as they happen.")}</section>`;
   }
 
-  route();
-  window.WLNotifications.startBadge();
+  // The owner's display preferences (Settings -> Your preferences): compact tables, and the page the dashboard opens on.
+  async function applyPrefs() {
+    try {
+      const r = await fetch("/api/settings", { credentials: "same-origin" });
+      if (!r.ok) return null;
+      const s = await r.json();
+      document.body.classList.toggle("compact-tables", !!s.compact_tables);
+      return s;
+    } catch (_e) { return null; }
+  }
+  (async () => {
+    const s = await applyPrefs();
+    if (s && !location.hash && /^[a-z]+$/.test(s.default_page || "") && s.default_page !== "overview") location.hash = "#/" + s.default_page; // a link to a page is never overridden
+    route();
+    window.WLNotifications.startBadge();
+  })();
 })();

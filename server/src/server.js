@@ -1,10 +1,9 @@
 import fs from "node:fs";
 import { openDb, migrate } from "./db.js";
 import { buildApp } from "./app.js";
-import { purgeAll, expirePending, purgeHousekeeping } from "./lib/retention.js";
-import { pruneAudit, purgeExpiredTokens } from "./lib/security.js";
-import { pruneNotifications, getPrefs } from "./lib/notifications.js";
-import { createBackup, listBackups } from "./lib/backup.js";
+import { runHousekeeping } from "./lib/housekeeping.js";
+import { runDueBackup } from "./lib/backupSchedule.js";
+import { readSettings } from "./lib/settings.js";
 
 const env = process.env;
 const missing = ["COOKIE_SECRET", "MASTER_KEY", "BASE_URL", "ACCESS_TTL", "REFRESH_TTL"].filter(k => !env[k]);
@@ -23,7 +22,7 @@ if (prod && !hasTls && env.TRUST_PROXY !== "true") {
 if (prod && !env.BASE_URL.startsWith("https://")) { console.error("BASE_URL must be https:// in production"); process.exit(1); }
 
 const dbPath = env.DB_PATH || "./data/tracker.db";
-const config = { dbPath, backupDir: env.BACKUP_DIR || "./data/backups", backupKeep: Number(env.BACKUP_KEEP || 14), backupIntervalHours: Number(env.BACKUP_INTERVAL_HOURS || 24) };
+const config = { dbPath, backupDir: env.BACKUP_DIR || "./data/backups", backupKeep: 14, backupIntervalHours: 24 }; // the two numbers are filled in below from the owner's settings, the environment, or the defaults
 const db = openDb(dbPath);
 const applied = migrate(db);
 if (applied.length) console.log("migrations applied: " + applied.join(", "));
@@ -33,26 +32,29 @@ if (!db.prepare("SELECT 1 FROM admins").get()) console.warn("No owner account ye
 process.on("unhandledRejection", e => console.error("unhandled rejection:", e));
 process.on("uncaughtException", e => { console.error("uncaught exception:", e); process.exit(1); });
 
-// Hourly housekeeping: retention, never-approved pairing requests, expired codes, old audit entries.
-const housekeeping = () => { try { purgeAll(db); expirePending(db); purgeHousekeeping(db); pruneAudit(db); purgeExpiredTokens(db); pruneNotifications(db, { days: getPrefs(db).retentionDays }); } catch (e) { console.error("housekeeping failed", e); } };
+// Settings: the owner's saved values, then the environment (when valid), then the defaults. A bad value in the environment is reported, never silently turned into something harmful.
+{
+  const s = readSettings(db);
+  for (const w of s.warnings) console.warn("settings: " + w);
+}
+// Hourly housekeeping: retention, never-approved pairing requests, expired codes, the audit log and notifications, all with the owner's limits.
+const housekeeping = () => { try { runHousekeeping(db); } catch (e) { console.error("housekeeping failed", e); } };
 housekeeping();
 setInterval(housekeeping, 60 * 60 * 1000).unref();
-
-// Scheduled backups (default every 24 h, keep the newest BACKUP_KEEP). One is taken at start-up if the newest is stale.
-const backupEveryMs = Number(env.BACKUP_INTERVAL_HOURS || 24) * 3600 * 1000;
-async function backupNow(why) {
-  try { const r = await createBackup(db, config.backupDir, config.backupKeep); console.log(`backup (${why}) written: ${r.name}`); }
-  catch (e) { console.error("BACKUP FAILED:", e.message); }
-}
-if (backupEveryMs > 0) {
-  const newest = listBackups(config.backupDir)[0];
-  if (!newest || Date.now() - newest.createdAt > backupEveryMs) await backupNow("startup");
-  setInterval(() => backupNow("scheduled"), backupEveryMs).unref();
-}
 
 const https = hasTls ? { cert: fs.readFileSync(env.TLS_CERT), key: fs.readFileSync(env.TLS_KEY) } : null;
 const app = await buildApp({ db, logger: true, https, config });
 // Without certs we only bind loopback (dev, or behind a TLS-terminating proxy).
 await app.listen({ port: Number(env.PORT || 8443), host: hasTls ? "0.0.0.0" : "127.0.0.1" });
+
+// Scheduled backups: every ten minutes the server asks whether one is due under the CURRENT settings (interval and keep count come from
+// Settings Studio, so a change applies at once). One is taken at start-up if the newest is stale. 0 hours switches them off.
+async function backupCheck(why) {
+  const r = await runDueBackup(db, app.wlConfig);
+  if (r.ran) console.log(`backup (${why}) written: ${r.name}`);
+  else if (r.error) console.error("BACKUP FAILED:", r.error);
+}
+await backupCheck("startup");
+setInterval(() => backupCheck("scheduled"), 10 * 60 * 1000).unref();
 
 for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, async () => { await app.close(); db.close(); process.exit(0); });
