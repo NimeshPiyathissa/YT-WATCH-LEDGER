@@ -167,3 +167,32 @@ test("A31: verification fails when a packaged file is not exactly the committed 
   assert.throws(() => verifyRelease(out, checkVersions(), [...committed, { path: "extra.txt", mode: "100644", data: Buffer.from("x") }]), /lacks committed files: extra\.txt/);
   assert.ok(r.zipFiles >= 30, "the extension was checked file by file: " + r.zipFiles);
 });
+
+/* ---- A32: the .tar.gz is the same bytes on every OS (zlib wrote the build machine's OS into the gzip header) ---- */
+const sample = () => [{ name: "top", dir: true }, { name: "top/run.sh", data: Buffer.from("#!/bin/sh\necho hi\n"), mode: 0o755 }, { name: "top/a.txt", data: Buffer.from("a".repeat(5000) + "\n"), mode: 0o644 }];
+test("A32: the gzip header is fixed (no name, no time, OS = Unix) and the rest is a function of the tar bytes only", () => {
+  const buf = tarGz(sample(), 1700000000), again = tarGz(sample(), 1700000000);
+  assert.deepEqual([...buf.subarray(0, 10)], [0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 2, 3], "magic, deflate, no flags, MTIME 0, XFL 2 (level 9), OS 3 (Unix) on " + process.platform);
+  assert.ok(Buffer.compare(buf, again) === 0, "the same entries give the same bytes");
+  const tar = zlib.gunzipSync(buf);
+  // what follows the header depends on nothing but the tar and zlib's level-9 deflate: the same on Windows, Linux and macOS
+  assert.ok(Buffer.compare(buf.subarray(10, buf.length - 8), zlib.deflateRawSync(tar, { level: 9 })) === 0, "the body is raw level-9 deflate of the tar");
+  assert.equal(buf.readUInt32LE(buf.length - 8), zlib.crc32(tar), "trailer CRC-32 of the tar");
+  assert.equal(buf.readUInt32LE(buf.length - 4), tar.length, "trailer size of the tar");
+  if (spawnSync("gzip", ["--version"]).status === 0) {
+    const d = tmpDir("yt-rel-gz-"); fs.writeFileSync(path.join(d, "t.tar.gz"), buf);
+    const r = spawnSync("gzip", ["-t", "t.tar.gz"], { cwd: d, encoding: "utf8" }); assert.equal(r.status, 0, "gzip -t accepts it: " + r.stderr);
+  }
+});
+
+test("A32: a release build's tarball has the fixed gzip header, and verification refuses one that does not", () => {
+  const out = tmpDir("yt-rel-a32-"), r = buildRelease({ out, allowDirty: true }), f = path.join(out, r.tarball);
+  const buf = fs.readFileSync(f);
+  assert.deepEqual([...buf.subarray(0, 10)], [0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 2, 3], "the release tarball's gzip header");
+  const committed = committedFiles(ROOT), v = checkVersions();
+  assert.equal(verifyRelease(out, v, committed).verified, true);
+  // the same archive with the header a Windows zlib writes (OS 10), with SHA256SUMS made to match it: still refused
+  const win = Buffer.from(buf); win[9] = 10; fs.writeFileSync(f, win);
+  fs.writeFileSync(path.join(out, "SHA256SUMS"), fs.readFileSync(path.join(out, "SHA256SUMS"), "utf8").replace(/^[0-9a-f]{64}(?=  watch-ledger-)/m, sha(win)));
+  assert.throws(() => verifyRelease(out, v, committed), /gzip header/);
+});

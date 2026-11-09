@@ -203,6 +203,13 @@ Nothing in this file claims real-browser or real-VPS testing that was not done; 
 - **Fix:** every file is read from the HEAD commit (`git ls-tree` + one `git cat-file --batch`), with its exact committed bytes and mode; the versions are checked on the committed files; the extension ZIP is built by the committed `tools/build-extension.mjs` from an export of the commit into a staging folder that the build removes. After building, `verifyRelease` checks every tarball entry and every extension file against the commit (contents, mode, nothing missing, nothing extra). An `--allow-dirty` build is now the last commit, and says so.
 - **Guard:** `release.test.js` (3 new tests): every tarball and ZIP file equals `git show HEAD:<file>` and LF files have no CR; a fixture repository checked out with `core.autocrlf=true` still packages LF, a file committed with CRLF keeps it, modes are kept; verification fails on a changed, missing or extra file. The build log prints the uncompressed tar's SHA-256, so builds of one commit on CI and here can be compared.
 
+### A32. The same commit gave a different .tar.gz, and a different SHA256SUMS, on Windows and on Linux
+- **Where:** `tools/build-release.mjs` (`tarGz`; my own work from the rc.1 milestone, never published).
+- **Cause:** byte 9 of a gzip header names the operating system, and zlib fills it in with the OS it was built for: 10 on Windows, 3 on Linux. Everything else in the file was already identical.
+- **Confirmed:** CI run 42569748909 (Ubuntu) and this machine built commit `4fcd083`: the uncompressed tar was identical (`817d1c33…bae154`), the `.tar.gz` was not (`b4115526…8a3c` on Linux, `7f25d617…230c` here). Setting only byte 9 of the Windows file to 3 gave exactly the Linux checksum.
+- **Fix:** `tarGz` checks that zlib's first 9 header bytes are the expected ones (no file name, no time, level 9; it refuses anything else) and sets the OS byte to 3 (Unix), so Linux builds are unchanged and Windows builds now match them. `verifyRelease` refuses a tarball whose gzip header is not that fixed header, even when `SHA256SUMS` matches it. All other packaging and security checks are unchanged.
+- **Guard:** `release.test.js` (2 new tests): the header is exactly `1f 8b 08 00 00000000 02 03` on every OS; the bytes after it are raw level-9 deflate of the tar and the trailer is its CRC-32 and size, so the file depends on nothing but the tar; the same entries give the same bytes; `gzip -t` accepts it; a release build has the header, and verification refuses one with the Windows header and a matching `SHA256SUMS`.
+
 ### A21. The Security page asked for an icon that does not exist
 - **Where:** `server/web/index.html`, `server/web/security.js` (my own work from the Security Center milestone, never released).
 - **Confirmed:** the new `server/test/icons.test.js` listed `shield` as missing. An unknown icon name does not draw nothing: it draws the `circle-alert` fallback, so the sidebar entry showed a warning symbol.
@@ -383,3 +390,31 @@ Run one suite at a time (the disk had 13 GB free before and after; no heavy suit
 - The 11 Linux-only installer runs: never executed here; CI on Ubuntu runs them.
 - A VPS: install, update from v0.7.0, rollback to v0.7.0 on a migrated database, restore.
 - Publishing: no tag, no release. Every asset built in this session came from `--allow-dirty` test builds in temporary folders; none may be published.
+
+## J. CI on Linux for A31, and A32 (2026-11-09)
+
+### CI run 42569748909 (commit `4fcd083`, before A32; ubuntu-24.04, Node v22.23.4)
+https://github.com/NimeshPiyathissa/YT-WATCH-LEDGER/actions/runs/42569748909 (manually started on `develop/v0.8.0`): every step passed.
+| Check | Result |
+|---|---|
+| Server, end-to-end and installer tests | 406 tests: 404 passed, 0 failed, 2 skipped (the two `WL_EXT_E2E=1` real-YouTube tests) |
+| Installer suite inside it | 143 passed, 0 skipped, 0 failed; "release-switch runs skipped for lack of symbolic links: 0". The 11 runs that are skipped on Windows ran and passed: the real update-history runs (117-126) and A29's rc -> final, rc -> final with a failed migration, wrong version running, rc.1 -> rc.2 and running-release guard (131-136); "env file mode" too. |
+| Extension tests | 272 checks, 0 failed |
+| Syntax, shell lint, documentation links, dependency audit (production, high and above), extension ZIP build and validation | all passed |
+| Release build of `4fcd083`, Linux vs this Windows machine | uncompressed tar `817d1c33…bae154` on both; extension ZIP `54459ac5…356b` on both; `.tar.gz` `b4115526…8a3c` vs `7f25d617…230c`, which is A32 |
+
+### A32 verification (this Windows machine, 4 GB RAM, suites run one at a time)
+| Check | Result |
+|---|---|
+| `release.test.js` | 12 tests, 12 passed (2 new for A32; the 10 existing ones unchanged). The 2 new tests failed before the fix (OS byte 10) and pass after it. |
+| Release build of `4fcd083` with the A32 build tool | `.tar.gz` `b4115526ef7fe41fc1e0432558f880691171fa9d17e81c127c8eb65b81bc8a3c`: exactly what CI's Linux build printed for that commit. Uncompressed tar and extension ZIP unchanged. |
+| Server suite (`node --test --test-concurrency=1 "test/**/*.test.js"`) | 408 tests: 406 passed, 0 failed, 2 skipped (`WL_EXT_E2E`); 509 s. Its installer suite: 131 passed, 12 skipped (11 release-switch runs, which need symbolic links, and "env file mode"), 0 failed. Nothing left behind. |
+| Installer suite on its own | 142 "ok", 0 failed (131 passed, 11 skipped, plus "env file mode"); its 7 packaging checks, including v0.7.0's `update.sh` accepting the tarball, pass |
+| Extension unit tests | 8 files, 272 checks, 0 failed |
+| Syntax (167 files), `bash -n`, `shellcheck` with CI's options, documentation links (207 in 43 files) | all clean |
+| `scripts/ui-check.mjs` | not run again: A32 changes only `tools/build-release.mjs` and its test, nothing the dashboard or server runs (122 / 0 on `4fcd083`, section I) |
+
+### Not verified
+- A CI run on the A32 commit itself: its `release.test.js` output must show the same `.tar.gz` checksum as this machine's build of that commit.
+- A VPS: install, update from v0.7.0, rollback to v0.7.0 on a migrated database, restore.
+- Publishing: no tag, no release; no asset built in this session may be published.

@@ -28,7 +28,7 @@ It writes three files to `dist/release/` and checks them before it finishes:
 
 | Asset | What it is |
 |---|---|
-| `watch-ledger-v<version>.tar.gz` | every file in the HEAD commit, under one top-level folder `watch-ledger-v<version>/`; what `update.sh --version` downloads and unpacks with `--strip-components=1`. Each file's bytes are read from git exactly as committed, never from the working tree (so a Windows checkout with `core.autocrlf` still ships LF). File modes come from git (the scripts run directly are executable), owner root, timestamps from the commit, so the same commit builds the same bytes on any machine. |
+| `watch-ledger-v<version>.tar.gz` | every file in the HEAD commit, under one top-level folder `watch-ledger-v<version>/`; what `update.sh --version` downloads and unpacks with `--strip-components=1`. Each file's bytes are read from git exactly as committed, never from the working tree (so a Windows checkout with `core.autocrlf` still ships LF). File modes come from git (the scripts run directly are executable), owner root, timestamps from the commit, and a fixed gzip header (no file name or time, OS byte "Unix"), so the same commit builds the same bytes, and the same `SHA256SUMS`, on any machine (checked on Windows and on CI's Linux). |
 | `yt-watch-tracker-v<version>.zip` | the Chrome extension, built from an export of the same commit, not tied to a server (the installer builds a configured copy on each server) |
 | `SHA256SUMS` | `<sha256>  <file>` for both; read by `update.sh` and by `sha256sum -c SHA256SUMS` |
 

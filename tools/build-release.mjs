@@ -108,6 +108,10 @@ function header(name, { size = 0, mode, mtime, type }) {
   let sum = 0; for (const b of h) sum += b; put(sum.toString(8).padStart(6, "0") + "\0 ", 148, 8);
   return h;
 }
+// The gzip header every release tarball has: magic, deflate, no flags (no file name or comment), MTIME 0, XFL 2 (level 9), OS 3 (Unix).
+// zlib writes the OS it was built for into the last byte (10 on Windows), so the same tar gave a different .tar.gz, and a different
+// SHA256SUMS, on Windows and on Linux (BUG_FIX_REPORT A32); it is set here, and the rest of the file depends only on the tar bytes.
+export const GZIP_HEADER = Buffer.from([0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 2, 3]);
 // entries: [{ name, data?: Buffer, mode, dir?: true }]; returns the .tar.gz bytes.
 export function tarGz(entries, mtime) {
   const parts = [];
@@ -117,7 +121,10 @@ export function tarGz(entries, mtime) {
     const pad = (512 - (e.data.length % 512)) % 512; if (pad) parts.push(Buffer.alloc(pad));
   }
   parts.push(Buffer.alloc(1024));
-  return zlib.gzipSync(Buffer.concat(parts), { level: 9 });
+  const gz = zlib.gzipSync(Buffer.concat(parts), { level: 9 });
+  if (Buffer.compare(gz.subarray(0, 9), GZIP_HEADER.subarray(0, 9)) !== 0) fail("unexpected gzip header from zlib: " + gz.subarray(0, 10).toString("hex"));
+  gz[9] = GZIP_HEADER[9];
+  return gz;
 }
 // Reads a .tar.gz written by tarGz (or any plain ustar): [{ name, mode, type, data }].
 export function readTarGz(buf) {
@@ -202,7 +209,8 @@ export function readZip(buf) {
 export function verifyRelease(out, v, committed = null) {
   const sums = fs.readFileSync(path.join(out, "SHA256SUMS"), "utf8").trim().split("\n").map(l => { const m = /^([0-9a-f]{64}) [ *](.+)$/.exec(l); if (!m) fail("bad SHA256SUMS line: " + l); return { hash: m[1], name: m[2] }; });
   for (const s of sums) if (sha256(fs.readFileSync(path.join(out, s.name))) !== s.hash) fail("checksum mismatch: " + s.name);
-  const tgz = sums.find(s => s.name.endsWith(".tar.gz")), entries = readTarGz(fs.readFileSync(path.join(out, tgz.name)));
+  const tgz = sums.find(s => s.name.endsWith(".tar.gz")), tgzBuf = fs.readFileSync(path.join(out, tgz.name)), entries = readTarGz(tgzBuf);
+  if (Buffer.compare(tgzBuf.subarray(0, 10), GZIP_HEADER) !== 0) fail("the tarball's gzip header is not the fixed one (A32): " + tgzBuf.subarray(0, 10).toString("hex"));
   const top = `watch-ledger-${v.tag}`;
   const bad = entries.filter(e => !(e.name === top + "/" || e.name.startsWith(top + "/")) || forbiddenPath(e.name.slice(top.length + 1).replace(/\/$/, "")));
   if (bad.length) fail("unexpected entries in the tarball: " + bad.slice(0, 5).map(e => e.name).join(", "));
