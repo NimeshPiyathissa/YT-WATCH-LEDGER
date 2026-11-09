@@ -9,7 +9,8 @@ import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { tmpDir } from "./tmpdir.js";
-import { checkVersions, forbiddenPath, secretIn, tarGz, readTarGz, buildRelease, verifyRelease, dirtyPaths, ReleaseError } from "../../tools/build-release.mjs";
+import zlib from "node:zlib";
+import { checkVersions, forbiddenPath, secretIn, tarGz, readTarGz, readZip, buildRelease, verifyRelease, dirtyPaths, committedFiles, makeTarball, ReleaseError } from "../../tools/build-release.mjs";
 import { parseVersion, compareVersions, channelOf } from "../src/lib/version.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -105,4 +106,64 @@ test("a tracked file that must never ship, or one holding a private key, stops t
     assert.throws(() => buildRelease({ root: dir, out }), re, file);
     assert.equal(fs.existsSync(out), false, "nothing was written");
   }
+});
+
+/* ---- A31: the release is the commit's exact bytes, whatever the working tree's line endings ---- */
+const gitShow = p => spawnSync("git", ["show", "HEAD:" + p], { cwd: ROOT, maxBuffer: 1 << 26 }).stdout;
+test("A31: every file in the tarball and in the extension ZIP is byte-for-byte the committed one (no CRLF where git has LF)", () => {
+  const out = tmpDir("yt-rel-a31-"), r = buildRelease({ out, allowDirty: true });
+  const committed = committedFiles(ROOT), byPath = new Map(committed.map(f => [f.path, f]));
+  const files = readTarGz(fs.readFileSync(path.join(out, r.tarball))).filter(e => e.type === "0");
+  assert.equal(files.length, committed.length, "exactly the committed files");
+  let lf = 0;
+  for (const e of files) {
+    const p = e.name.slice(r.top.length + 1), blob = gitShow(p);
+    assert.ok(Buffer.compare(blob, e.data) === 0, "tarball copy = git show HEAD:" + p);
+    assert.ok(Buffer.compare(byPath.get(p).data, blob) === 0, "committedFiles() = git show HEAD:" + p);
+    if (!blob.includes(13)) { assert.ok(!e.data.includes(13), p + " has no CR in the release, as in git"); lf++; }
+  }
+  assert.ok(lf > 250, "most files are LF text: " + lf);
+  const zip = readZip(fs.readFileSync(path.join(out, r.zip)));
+  assert.ok(zip.length >= 30 && zip.some(z => z.name === "background.js"));
+  for (const z of zip) {
+    const blob = gitShow(z.name);
+    if (z.name === "manifest.json") assert.deepEqual(JSON.parse(z.data.toString()), JSON.parse(blob.toString()), "the extension manifest has the committed content");
+    else assert.ok(Buffer.compare(blob, z.data) === 0, "extension copy = git show HEAD:" + z.name);
+  }
+  // what CI and this machine built, for comparing builds of the same commit across machines (compressed bytes depend on zlib)
+  const tarBytes = zlib.gunzipSync(fs.readFileSync(path.join(out, r.tarball)));
+  console.log(`release build of ${spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: ROOT, encoding: "utf8" }).stdout.trim()}: tar (uncompressed) sha256 ${sha(tarBytes)}; ${r.sums.trim().replace(/\n/g, "; ")}; node ${process.version}, zlib ${process.versions.zlib}`);
+});
+
+test("A31: a working tree checked out with CRLF (core.autocrlf) still packages the committed LF bytes; committed CRLF stays CRLF", { skip: spawnSync("git", ["--version"]).status !== 0 ? "no git" : false }, () => {
+  const g = (d, ...a) => { const r = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", ...a], { cwd: d, encoding: "utf8" }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
+  const { dir, w } = fixtureRepo();
+  w("docs/a.md", "line one\nline two\n"); w("bin/run.sh", "#!/bin/sh\necho hi\n"); w("win/keep.bat", "echo one\r\necho two\r\n");
+  w(".gitattributes", "*.bat -text\n");
+  g(dir, "init", "-q"); g(dir, "config", "core.autocrlf", "false"); g(dir, "add", "-A"); g(dir, "update-index", "--chmod=+x", "bin/run.sh"); g(dir, "commit", "-q", "-m", "fixture");
+  // check the same commit out again with CRLF line endings, the way a Windows clone does
+  g(dir, "config", "core.autocrlf", "true"); fs.rmSync(path.join(dir, "docs"), { recursive: true }); fs.rmSync(path.join(dir, "bin"), { recursive: true }); g(dir, "checkout", "--", ".");
+  assert.ok(fs.readFileSync(path.join(dir, "docs/a.md")).includes("\r\n"), "(setup) the working tree has CRLF");
+  assert.equal(g(dir, "status", "--porcelain", "--untracked-files=no"), "", "(setup) git sees no change: it is only the checkout's line endings");
+  const files = committedFiles(dir), f = n => files.find(x => x.path === n);
+  assert.equal(f("docs/a.md").data.toString(), "line one\nline two\n", "the committed LF bytes, not the working tree's CRLF");
+  assert.equal(f("win/keep.bat").data.toString(), "echo one\r\necho two\r\n", "a file committed with CRLF keeps it: exact bytes, not a conversion");
+  assert.equal(f("bin/run.sh").mode, "100755");
+  const e = readTarGz(makeTarball(files, "watch-ledger-v0.9.0-rc.2", 1700000000));
+  const t = n => e.find(x => x.name === "watch-ledger-v0.9.0-rc.2/" + n);
+  assert.equal(t("docs/a.md").data.toString(), "line one\nline two\n");
+  assert.equal(t("win/keep.bat").data.toString(), "echo one\r\necho two\r\n");
+  assert.equal(t("bin/run.sh").mode, 0o755); assert.equal(t("docs/a.md").mode, 0o644);
+  assert.equal(checkVersions(dir, p => f(p).data.toString()).version, "0.9.0-rc.2", "versions are checked on the committed files");
+});
+
+test("A31: verification fails when a packaged file is not exactly the committed one", () => {
+  const out = tmpDir("yt-rel-a31v-"), r = buildRelease({ out, allowDirty: true });
+  const committed = committedFiles(ROOT);
+  assert.equal(verifyRelease(out, checkVersions(), committed).verified, true);
+  const changed = committed.map(f => (f.path === "server/src/server.js" ? { ...f, data: Buffer.from(f.data.toString().replace(/\n/g, "\r\n")) } : f));
+  assert.throws(() => verifyRelease(out, checkVersions(), changed), /differs from the commit: server\/src\/server\.js/);
+  assert.throws(() => verifyRelease(out, checkVersions(), committed.filter(f => f.path !== "LICENSE")), /not in the commit: LICENSE/);
+  assert.throws(() => verifyRelease(out, checkVersions(), [...committed, { path: "extra.txt", mode: "100644", data: Buffer.from("x") }]), /lacks committed files: extra\.txt/);
+  assert.ok(r.zipFiles >= 30, "the extension was checked file by file: " + r.zipFiles);
 });

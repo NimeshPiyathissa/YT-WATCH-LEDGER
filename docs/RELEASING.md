@@ -28,11 +28,11 @@ It writes three files to `dist/release/` and checks them before it finishes:
 
 | Asset | What it is |
 |---|---|
-| `watch-ledger-v<version>.tar.gz` | every file git tracks, under one top-level folder `watch-ledger-v<version>/`; what `update.sh --version` downloads and unpacks with `--strip-components=1`. File modes come from git (the scripts run directly are executable), owner root, timestamps from the commit, so the same commit builds the same bytes on any machine. |
-| `yt-watch-tracker-v<version>.zip` | the Chrome extension, not tied to a server (the installer builds a configured copy on each server) |
+| `watch-ledger-v<version>.tar.gz` | every file in the HEAD commit, under one top-level folder `watch-ledger-v<version>/`; what `update.sh --version` downloads and unpacks with `--strip-components=1`. Each file's bytes are read from git exactly as committed, never from the working tree (so a Windows checkout with `core.autocrlf` still ships LF). File modes come from git (the scripts run directly are executable), owner root, timestamps from the commit, so the same commit builds the same bytes on any machine. |
+| `yt-watch-tracker-v<version>.zip` | the Chrome extension, built from an export of the same commit, not tied to a server (the installer builds a configured copy on each server) |
 | `SHA256SUMS` | `<sha256>  <file>` for both; read by `update.sh` and by `sha256sum -c SHA256SUMS` |
 
-It refuses to build when the versions disagree, when a tracked file is something that must never ship (an `.env`, a key or certificate, a database, a backup, a log, `node_modules`, build output), when a file holds a private key or an access token, or when tracked files have uncommitted changes. `--allow-dirty` exists for the tests only; never publish such a build.
+It refuses to build when the versions disagree, when a tracked file is something that must never ship (an `.env`, a key or certificate, a database, a backup, a log, `node_modules`, build output), when a file holds a private key or an access token, or when tracked files have uncommitted changes. `--allow-dirty` exists for the tests only; such a build is the last commit (the uncommitted changes are not in it), but never publish it. After building it checks that every file in the tarball and in the extension ZIP is byte-for-byte the committed one (the extension's `manifest.json` is compared by content, since the extension build rewrites its formatting).
 
 ## 3. Check before publishing
 

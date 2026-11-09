@@ -15,6 +15,16 @@ test("installer, update, backup, restore and health-check scripts (sandboxed, re
   const r = spawnSync("bash", ["scripts/tests/test-installer.sh"], { cwd: ROOT, encoding: "utf8", timeout: 480000, env: { ...process.env, WL_NODE: process.execPath } });
   const failed = (r.stdout.match(/^not ok .*$/gm) || []);
   const summary = (r.stdout.match(/^# (\d+) passed, (\d+) failed/m) || []);
+  // Visible in every log (CI included): each update, rollback, release-switch (A29), history and packaging check with its result, so
+  // a reader can see that the Linux-only runs really ran. Printed before any assertion, so it is there when something fails too.
+  const lines = r.stdout.split("\n");
+  const from = lines.findIndex(l => l.startsWith("# --- update.sh version and integrity rules"));
+  const shown = lines.slice(Math.max(0, from)).filter(l => /^# ---/.test(l) || /^(not )?ok \d+ - /.test(l) || /^# SKIP/.test(l) || /^# \d+ passed/.test(l));
+  console.log(["installer suite: update, rollback, release-switch and packaging checks (" + process.platform + ")", ...shown].join("\n"));
+  const symlinkSkips = lines.filter(l => /# SKIP .*needs symbolic links/.test(l));
+  console.log(`installer suite: ${lines.filter(l => /^ok \d+ - /.test(l) && !/# SKIP/.test(l)).length} passed, ${lines.filter(l => /# SKIP/.test(l)).length} skipped, ${failed.length} failed; release-switch runs skipped for lack of symbolic links: ${symlinkSkips.length}`);
+  // On Linux the real release-switch runs must execute: a skip there would hide them, so it fails the test.
+  if (process.platform === "linux") assert.deepEqual(symlinkSkips, [], "on Linux the release-switch runs must run, not be skipped");
   assert.deepEqual(failed, [], failed.join("\n") + "\n" + r.stdout.split("\n").filter(l => l.startsWith("#   ")).join("\n"));
   assert.equal(r.status, 0, r.stderr);
   assert.ok(Number(summary[1]) >= 90, "the suite ran its checks: " + summary[0]);

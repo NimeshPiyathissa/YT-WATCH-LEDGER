@@ -196,6 +196,13 @@ Nothing in this file claims real-browser or real-VPS testing that was not done; 
 - **Fix:** the six scripts that are run directly are marked executable in git (`100755`); `tools/build-release.mjs` writes file modes from git into the tarball whatever machine builds it; the Updates page's commands and the upgrade guide use `sudo bash scripts/...`, which works on v0.7.0 servers too. A v0.7.0 server's first update must be run with `bash` (docs/UPGRADING.md, docs/KNOWN_ISSUES.md section 7).
 - **Guard:** `release.test.js` checks the six scripts are 0755 in the built tarball and readable by GNU tar as such.
 
+### A31. A release built on Windows was not the commit: its text files had CRLF line endings, so builds were not reproducible
+- **Where:** `tools/build-release.mjs` (my own work from the rc.1 milestone, never published).
+- **Cause:** the tarball and the extension ZIP were built from the working tree. On this Windows machine git checks files out with `core.autocrlf`, so the working tree has CRLF where the commit has LF: a build here shipped CRLF sources, docs and JSON and gave different bytes (and checksums) from a Linux build of the same commit. Shell scripts, service units and nginx templates were not affected: `.gitattributes` keeps them LF on every checkout.
+- **Confirmed:** `git ls-files --eol` on this checkout: of the 267 files git stores with LF, 148 are CRLF in the working tree (for example `server/src/server.js`) and 5 mixed; none is a `.sh` file. A working-tree build packaged those as they are on disk, so its copies differed from `git show HEAD:<file>`.
+- **Fix:** every file is read from the HEAD commit (`git ls-tree` + one `git cat-file --batch`), with its exact committed bytes and mode; the versions are checked on the committed files; the extension ZIP is built by the committed `tools/build-extension.mjs` from an export of the commit into a staging folder that the build removes. After building, `verifyRelease` checks every tarball entry and every extension file against the commit (contents, mode, nothing missing, nothing extra). An `--allow-dirty` build is now the last commit, and says so.
+- **Guard:** `release.test.js` (3 new tests): every tarball and ZIP file equals `git show HEAD:<file>` and LF files have no CR; a fixture repository checked out with `core.autocrlf=true` still packages LF, a file committed with CRLF keeps it, modes are kept; verification fails on a changed, missing or extra file. The build log prints the uncompressed tar's SHA-256, so builds of one commit on CI and here can be compared.
+
 ### A21. The Security page asked for an icon that does not exist
 - **Where:** `server/web/index.html`, `server/web/security.js` (my own work from the Security Center milestone, never released).
 - **Confirmed:** the new `server/test/icons.test.js` listed `shield` as missing. An unknown icon name does not draw nothing: it draws the `circle-alert` fallback, so the sidebar entry showed a warning symbol.
@@ -354,3 +361,25 @@ Run one suite at a time (the disk had 13 GB free before and after; no heavy suit
 - A full server-suite pass after the last test-infrastructure change (see above).
 - A VPS: install, update from v0.7.0, rollback to v0.7.0 on a migrated database, restore.
 - Publishing: no tag, no release; the built assets in this session were made with `--allow-dirty` from uncommitted files and must not be published.
+
+## I. A31: the release is built from the commit (2026-11-09, Windows 11 development machine, 4 GB RAM)
+
+### What changed
+- A31 (above): `tools/build-release.mjs` packages the HEAD commit's exact bytes and verifies every packaged file against it; `docs/RELEASING.md` updated.
+- `server/test/installer.test.js` prints each update, rollback, release-switch and packaging check with its result, and how many release-switch runs were skipped for lack of symbolic links, so a CI log shows that the Linux-only runs really ran. On Linux a skipped release-switch run fails the test.
+
+### Verification (suites run one at a time; the server suite with `--test-concurrency=1`; 0.4-0.7 GB of free memory throughout, 12 GB free disk)
+| Check | Result |
+|---|---|
+| Server suite (`node --test --test-concurrency=1 "test/**/*.test.js"`, the same files as `npm test`, one at a time) | 406 tests: 404 passed, 0 failed, 2 skipped (the two `WL_EXT_E2E=1` real-YouTube tests); 375 s. `release.test.js` 10 tests (3 new for A31). Inside it, the installer suite: 131 passed, 12 skipped (11 release-switch runs and "env file mode"), 0 failed; the 11 release-switch runs skipped for lack of symbolic links. No test temp folders or Chrome profiles left behind. This replaces section H's incomplete last run. |
+| Installer suite (`scripts/tests/test-installer.sh`), on its own | 142 "ok", 0 failed: 131 passed and 11 skipped (the release-switch runs that need symbolic links), plus the existing "env file mode (not Linux)" skip. Same as section H. |
+| Extension unit tests | 8 files, 272 checks, 0 failed |
+| `scripts/ui-check.mjs` (throwaway server, version 0.8.0-rc.1) | 122 passed, 0 failed; no Chrome left running |
+| Syntax (`node --check`, 167 files), `bash -n`, `shellcheck` with CI's options, documentation links (207 in 43 files) | all clean |
+| Release build of `d53b947` with `--allow-dirty` (inside `release.test.js`) | uncompressed tar SHA-256 `5afb89821b1cb54a5460a7d5444a8a8878eaee24ea082d06bc7e693e21dc4a9e`, the same in two separate runs; every tarball and extension file equals `git show HEAD:<file>` |
+
+### Not verified
+- That a Linux (CI) build of the same commit gives the same tar SHA-256: CI prints it in the `release.test.js` output; not yet compared.
+- The 11 Linux-only installer runs: never executed here; CI on Ubuntu runs them.
+- A VPS: install, update from v0.7.0, rollback to v0.7.0 on a migrated database, restore.
+- Publishing: no tag, no release. Every asset built in this session came from `--allow-dirty` test builds in temporary folders; none may be published.
