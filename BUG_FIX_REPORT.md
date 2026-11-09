@@ -391,7 +391,7 @@ Run one suite at a time (the disk had 13 GB free before and after; no heavy suit
 - A VPS: install, update from v0.7.0, rollback to v0.7.0 on a migrated database, restore.
 - Publishing: no tag, no release. Every asset built in this session came from `--allow-dirty` test builds in temporary folders; none may be published.
 
-## J. CI on Linux for A31, and A32 (2026-11-09)
+## J. CI on Linux for A31, A32, and the cross-platform checksum check (2026-11-09)
 
 ### CI run 42569748909 (commit `4fcd083`, before A32; ubuntu-24.04, Node v22.23.4)
 https://github.com/NimeshPiyathissa/YT-WATCH-LEDGER/actions/runs/42569748909 (manually started on `develop/v0.8.0`): every step passed.
@@ -414,7 +414,23 @@ https://github.com/NimeshPiyathissa/YT-WATCH-LEDGER/actions/runs/42569748909 (ma
 | Syntax (167 files), `bash -n`, `shellcheck` with CI's options, documentation links (207 in 43 files) | all clean |
 | `scripts/ui-check.mjs` | not run again: A32 changes only `tools/build-release.mjs` and its test, nothing the dashboard or server runs (122 / 0 on `4fcd083`, section I) |
 
+### CI run 42572644684 (commit `e9c29c7`, A32; ubuntu-24.04, Node v22.23.4): cross-platform checksums
+https://github.com/NimeshPiyathissa/YT-WATCH-LEDGER/actions/runs/42572644684 (manually started on `develop/v0.8.0`): every step passed (syntax, extension tests, server / end-to-end / installer tests, shell lint, documentation links, dependency audit, extension ZIP build and validation).
+| Check | Result |
+|---|---|
+| Server, end-to-end and installer tests | 408 tests: 406 passed, 0 failed, 2 skipped (the two `WL_EXT_E2E=1` real-YouTube tests); no "not ok" line in the log |
+| Installer suite inside it | 143 passed, 0 skipped, 0 failed; "release-switch runs skipped for lack of symbolic links: 0". The Linux-only runs ran and passed: real update attempts and update history (117-126), A29 rc -> final, its history, rc -> final with a failed migration, wrong version running, rc.1 -> rc.2, running-release guard (131-136) |
+| Extension tests | 272 checks, 0 failed |
+
+Release build of `e9c29c7`: CI (Linux, Node v22.23.4) against this Windows machine (Node v24.18.0, clean working tree, no `--allow-dirty`); both zlib 1.3.1:
+| Asset | Linux (CI) | Windows | |
+|---|---|---|---|
+| tar, uncompressed | `64969fbb6bdff87f1430111a96119eab64e38b1014f81ed2b62f46b30506cdb6` | `64969fbb6bdff87f1430111a96119eab64e38b1014f81ed2b62f46b30506cdb6` | identical |
+| `watch-ledger-v0.8.0-rc.1.tar.gz` | `026f56e35bb1a8e8b827ae9ff748386ae7cbbf56bb1d43cb69d5876c2e8ada0b` | `026f56e35bb1a8e8b827ae9ff748386ae7cbbf56bb1d43cb69d5876c2e8ada0b` | identical |
+| `yt-watch-tracker-v0.8.0-rc.1.zip` | `54459ac50bfb1a69471f4ae4bbc85d7daa9f098a16306185777264113404356b` | `54459ac50bfb1a69471f4ae4bbc85d7daa9f098a16306185777264113404356b` | identical |
+
+A31 and A32 are verified across platforms: the same commit gives the same three assets, and so the same `SHA256SUMS`, on Windows and on Linux. (Compressed bytes depend on zlib's deflate; both builds used zlib 1.3.1. A different zlib version could compress differently; the uncompressed tar would still match.)
+
 ### Not verified
-- A CI run on the A32 commit itself: its `release.test.js` output must show the same `.tar.gz` checksum as this machine's build of that commit.
 - A VPS: install, update from v0.7.0, rollback to v0.7.0 on a migrated database, restore.
 - Publishing: no tag, no release; no asset built in this session may be published.
