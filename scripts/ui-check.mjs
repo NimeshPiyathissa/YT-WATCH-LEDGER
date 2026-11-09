@@ -51,7 +51,7 @@ async function goto(url) {
   await send("Page.navigate", { url }); await loaded;
 }
 
-const PAGES = [["overview", "#/overview", "Overview"], ["analytics", "#/analytics", "Analytics"], ["history", "#/history", "History"], ["videos", "#/videos", "Videos"],
+const PAGES = [["overview", "#/overview", "Overview"], ["analytics", "#/analytics", "Analytics"], ["reports", "#/reports", "Reports"], ["history", "#/history", "History"], ["videos", "#/videos", "Videos"],
   ["devices", "#/devices", "Devices"], ["health", "#/health", "Health Center"], ["data", "#/data", null], ["security", "#/security", "Security Center"], ["notifications", "#/notifications", "Notifications"], ["settings", "#/settings", "Settings"], ["audit", "#/audit", null]];
 const SIZES = [["phone", 390, 800, true], ["tablet", 820, 1100, false], ["desktop", 1440, 900, false]];
 const results = [];
@@ -108,7 +108,9 @@ try {
   check("run", false, e.message);
 } finally {
   try { await send("Browser.close"); } catch { /* closing */ }
-  setTimeout(() => proc.kill(), 1500).unref();
+  // wait for Chrome to exit, then remove its temporary profile (it used to be left behind on every run: BUG_FIX_REPORT A26)
+  await new Promise(ok => { if (proc.exitCode !== null) return ok(); proc.once("exit", ok); setTimeout(() => { try { proc.kill(); } catch { /* done */ } ok(); }, 3000).unref(); });
+  try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 }); } catch { /* still releasing files */ }
 }
 const failed = results.filter(r => !r.ok);
 console.log(`\n${results.length - failed.length} passed, ${failed.length} failed`);

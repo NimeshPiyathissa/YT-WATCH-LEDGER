@@ -6,7 +6,6 @@
 // guided manual checklist in docs/MANUAL_TEST_CHECKLIST_EXTENSION.md covers them.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -16,6 +15,7 @@ import { openDb, migrate } from "../src/db.js";
 import { buildApp } from "../src/app.js";
 import { uuid } from "../src/lib/crypto.js";
 import "./env.js";
+import { tmpDir } from "./tmpdir.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const MOCK = process.env.WL_E2E_MOCK === "1"; // WL_E2E_MOCK=1: play a local stand-in for the watch page instead of real YouTube (scripts/lib/mock-youtube.mjs)
@@ -25,11 +25,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 test("real Chrome: the built extension pairs, tracks real YouTube playback, syncs, survives an outage and honours a revoke", { skip: ON ? false : "set WL_EXT_E2E=1 to run (needs Chrome and the internet)", timeout: 420000 }, async () => {
   const { launch } = await import("../../scripts/lib/chrome-ext.mjs");
-  const out = fs.mkdtempSync(path.join(os.tmpdir(), "wl-e2e-build-"));
+  const out = tmpDir("wl-e2e-build-");
   const b = spawnSync(process.execPath, [path.join(ROOT, "tools", "build-extension.mjs"), "--out", out], { encoding: "utf8" });
   assert.equal(b.status, 0, b.stdout + b.stderr);
 
-  const dbFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "wl-e2e-db-")), "e2e.db");
+  const dbFile = path.join(tmpDir("wl-e2e-db-"), "e2e.db");
   const OWNER = "e2e-owner@example.test", PW = "e2e-throwaway-password-123";
   const db = openDb(dbFile); migrate(db);
   db.prepare("INSERT INTO admins(id,email,pw_hash,created_at) VALUES (?,?,?,?)").run(uuid(), OWNER, await argon2.hash(PW), Date.now());
@@ -227,7 +227,7 @@ test("real Chrome: 40 quick pause/resume cycles are each recorded exactly once, 
   const { launch } = await import("../../scripts/lib/chrome-ext.mjs");
   const { startMockYouTube, mockAvailable } = await import("../../scripts/lib/mock-youtube.mjs");
   if (!mockAvailable()) return t.skip("needs openssl and ffmpeg on the PATH");
-  const out = fs.mkdtempSync(path.join(os.tmpdir(), "wl-e2e-build-"));
+  const out = tmpDir("wl-e2e-build-");
   assert.equal(spawnSync(process.execPath, [path.join(ROOT, "tools", "build-extension.mjs"), "--out", out]).status, 0);
   const mock = await startMockYouTube();
   const chrome = await launch({ extensionDir: path.join(out, "extension"), chromeArgs: mock.chromeArgs });

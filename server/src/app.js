@@ -26,6 +26,7 @@ import deviceCenterRoutes from "./routes/deviceCenter.js";
 import securityRoutes from "./routes/security.js";
 import notificationRoutes from "./routes/notifications.js";
 import settingsStudioRoutes from "./routes/settingsStudio.js";
+import reportRoutes from "./routes/reports.js";
 import { applyRuntime } from "./lib/settings.js";
 import { createHub } from "./lib/realtime.js";
 
@@ -85,6 +86,7 @@ export async function buildApp({ db, logger = false, https = null, config = {} }
   await app.register(securityRoutes, { db });
   await app.register(notificationRoutes, { db, config });
   await app.register(settingsStudioRoutes, { db, config });
+  await app.register(reportRoutes, { db });
   app.decorate("wlConfig", config); // the live configuration the owner can change; the timers in server.js read it too
   applyRuntime(db, config);          // the owner's saved values win over the environment from the first request
   await app.register(fastifyStatic, { root: WEB }); // admin SPA (PART B §B7)

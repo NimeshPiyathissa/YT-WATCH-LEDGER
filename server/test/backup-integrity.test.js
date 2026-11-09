@@ -3,15 +3,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import * as B from "../src/lib/backup.js";
 import { openDb, migrate, knownMigrations } from "../src/db.js";
 import { uuid, encryptJSON } from "../src/lib/crypto.js";
 import "./env.js";
+import { tmpDir } from "./tmpdir.js";
 
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "yt-bki-"));
+const tmp = () => tmpDir("yt-bki-");
 function seeded(dir, name = "tracker.db") {
   const file = path.join(dir, name), db = openDb(file); migrate(db);
   const admin = uuid(), dev = uuid();

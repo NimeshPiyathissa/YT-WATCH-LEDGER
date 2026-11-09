@@ -62,7 +62,10 @@ function eachPiece(t0, t1, next, fn) {
 }
 
 // One pass over every device: clip to [from, to), merge overlaps, share overlapping spans, and bucket the result.
-function sweep(intervals, from, to, gran, tz) {
+// `match` (optional) narrows what is counted to some videos or channels WITHOUT changing how overlaps are shared: every interval still
+// takes part in the sharing, and only the shares of the matching ones are counted. So a channel's filtered total is exactly that
+// channel's figure in the unfiltered result, and the filtered totals never exceed the unfiltered ones.
+function sweep(intervals, from, to, gran, tz, match = null) {
   const byDevice = new Map();
   for (const it of intervals) {
     const s = Math.max(it.start, from), e = Math.min(it.end, to);
@@ -77,36 +80,41 @@ function sweep(intervals, from, to, gran, tz) {
   const bump = (m, k, ms, init) => { const v = m.get(k) || init(); v.ms += ms; m.set(k, v); return v; };
   for (const [deviceId, list] of byDevice) {
     const points = [];
-    list.forEach((it, i) => { out.rawMs += it.e - it.s; points.push([it.s, 1, i], [it.e, -1, i]); });
+    list.forEach((it, i) => { it.m = !match || match(it); if (it.m) out.rawMs += it.e - it.s; points.push([it.s, 1, i], [it.e, -1, i]); });
     points.sort((a, b) => a[0] - b[0] || a[1] - b[1]); // an interval that ends where another starts never overlaps it
     const active = new Set();
     let prev = null, deviceMs = 0;
     for (const [t, d, i] of points) {
-      if (prev !== null && t > prev && active.size) {
-        const span = t - prev, share = span / active.size;
-        deviceMs += span;
+      let m = 0;
+      if (prev !== null && t > prev && active.size) for (const j of active) if (list[j].m) m++;
+      if (m) {
+        const span = t - prev, share = span / active.size, frac = m === active.size ? 1 : m / active.size; // unfiltered: exactly the whole span
+        deviceMs += frac === 1 ? span : share * m;
         for (const j of active) {
           const it = list[j];
+          if (!it.m) continue;
           bump(out.videos, it.videoId, share, () => ({ videoId: it.videoId, title: it.title || "", ms: 0, sessions: new Set(), last: 0 }));
           const v = out.videos.get(it.videoId); v.sessions.add(it.deviceId + "/" + it.sessionId); if (it.title) v.title = it.title; v.last = Math.max(v.last, t);
           bump(out.channels, it.channel || "(unknown)", share, () => ({ channel: it.channel || "(unknown)", ms: 0, videos: new Set() })).videos.add(it.videoId);
-          bump(out.sessions, it.deviceId + "/" + it.sessionId, share, () => ({ ms: 0 }));
+          const se = bump(out.sessions, it.deviceId + "/" + it.sessionId, share, () => ({ ms: 0, deviceId: it.deviceId, sessionId: it.sessionId, videoId: it.videoId, title: "", channel: "", first: prev, last: 0 }));
+          if (it.title) se.title = it.title; if (it.channel) se.channel = it.channel; se.first = Math.min(se.first, prev); se.last = Math.max(se.last, t);
         }
         eachPiece(prev, t, x => nextBucketStart(bucketStart(x, gran, tz), gran, tz), (a, b) => {
           const k = bucketStart(a, gran, tz);
-          out.buckets.set(k, (out.buckets.get(k) || 0) + (b - a));
+          out.buckets.set(k, (out.buckets.get(k) || 0) + (b - a) * frac);
         });
         eachPiece(prev, t, x => dayStart(x, tz) + DAY, (a, b) => out.days.add(dayStart(a, tz)));
         eachPiece(prev, t, x => { const o = tzOffsetMs(x, tz); return x - mod(x + o, HOUR) + HOUR; }, (a, b) => {
-          out.hours[localHour(a, tz)] += b - a; out.weekdays[localWeekday(a, tz)] += b - a;
+          out.hours[localHour(a, tz)] += (b - a) * frac; out.weekdays[localWeekday(a, tz)] += (b - a) * frac;
         });
       }
       if (d === 1) active.add(i); else active.delete(i);
       prev = t;
     }
+    if (!list.some(it => it.m)) continue; // nothing on this device matches the filter
     out.totalMs += deviceMs;
     bump(out.devices, deviceId, deviceMs, () => ({ deviceId, ms: 0, sessions: new Set() }));
-    for (const it of list) out.devices.get(deviceId).sessions.add(it.sessionId);
+    for (const it of list) if (it.m) out.devices.get(deviceId).sessions.add(it.sessionId);
   }
   return out;
 }
@@ -114,12 +122,13 @@ function sweep(intervals, from, to, gran, tz) {
 const round = n => Math.round(n);
 const trendOf = pct => (pct === null ? "none" : pct > 5 ? "up" : pct < -5 ? "down" : "flat");
 
-// params: { intervals, from, to, granularity ('auto'|'day'|'week'|'month'), tz, labels: {deviceId: label}, sessionMeta?: [..] }
-export function computeAnalytics({ intervals, from, to, granularity = "auto", tz = DISPLAY_TZ, labels = {}, sessions = [] }) {
+// params: { intervals, from, to, granularity ('auto'|'day'|'week'|'month'), tz, labels: {deviceId: label}, sessions?: [..],
+//   match?: interval => boolean (count only these; see sweep), detail?: true (also every video, channel and viewing, not only the top 10) }
+export function computeAnalytics({ intervals, from, to, granularity = "auto", tz = DISPLAY_TZ, labels = {}, sessions = [], match = null, detail = false }) {
   const gran = ["day", "week", "month"].includes(granularity) ? granularity : autoGranularity(from, to);
-  const cur = sweep(intervals, from, to, gran, tz);
+  const cur = sweep(intervals, from, to, gran, tz, match);
   const len = to - from, pFrom = from - len, pTo = from;
-  const prev = sweep(intervals, pFrom, pTo, gran, tz);
+  const prev = sweep(intervals, pFrom, pTo, gran, tz, match);
 
   const series = [];
   for (let b = bucketStart(from, gran, tz), n = 0; b < to && n < 800; b = nextBucketStart(b, gran, tz), n++) {
@@ -128,9 +137,17 @@ export function computeAnalytics({ intervals, from, to, granularity = "auto", tz
   const watchMs = round(cur.totalMs), prevMs = round(prev.totalMs);
   const deltaPct = prevMs > 0 ? Math.round((watchMs - prevMs) / prevMs * 1000) / 10 : (watchMs > 0 ? null : 0);
   const activeDays = cur.days.size;
-  const inRange = sessions.filter(s => s.start >= from && s.start < to);
+  const inRange = sessions.filter(s => s.start >= from && s.start < to && (!match || match(s)));
   const perSession = [...cur.sessions.values()].map(v => v.ms);
   const sorted = (m, f) => [...m.values()].sort((a, b) => b.ms - a.ms || String(f(a)).localeCompare(String(f(b))));
+  const videoOut = v => ({ videoId: v.videoId, title: v.title, watchMs: round(v.ms), sessions: v.sessions.size, lastWatchedAt: v.last });
+  const channelOut = c => ({ channel: c.channel, watchMs: round(c.ms), videos: c.videos.size });
+  const extra = !detail ? {} : {
+    videos: sorted(cur.videos, v => v.videoId).map(videoOut),
+    channels: sorted(cur.channels, c => c.channel).map(channelOut),
+    viewings: [...cur.sessions.values()].sort((a, b) => a.first - b.first || String(a.sessionId).localeCompare(String(b.sessionId)))
+      .map(v => ({ deviceId: v.deviceId, deviceLabel: labels[v.deviceId] || "Device", sessionId: v.sessionId, videoId: v.videoId, title: v.title, channel: v.channel, firstPlayedAt: v.first, lastPlayedAt: v.last, watchMs: round(v.ms) }))
+  };
   return {
     timeZone: tz,
     range: { from, to, granularity: gran },
@@ -145,10 +162,11 @@ export function computeAnalytics({ intervals, from, to, granularity = "auto", tz
     },
     series,
     comparison: { from: pFrom, to: pTo, watchMs: prevMs, deltaMs: watchMs - prevMs, deltaPct, trend: trendOf(deltaPct) },
-    topVideos: sorted(cur.videos, v => v.videoId).slice(0, 10).map(v => ({ videoId: v.videoId, title: v.title, watchMs: round(v.ms), sessions: v.sessions.size, lastWatchedAt: v.last })),
-    topChannels: sorted(cur.channels, c => c.channel).slice(0, 10).map(c => ({ channel: c.channel, watchMs: round(c.ms), videos: c.videos.size })),
+    topVideos: sorted(cur.videos, v => v.videoId).slice(0, 10).map(videoOut),
+    topChannels: sorted(cur.channels, c => c.channel).slice(0, 10).map(channelOut),
     byDevice: sorted(cur.devices, d => d.deviceId).map(d => ({ deviceId: d.deviceId, label: labels[d.deviceId] || "Device", watchMs: round(d.ms), sessions: d.sessions.size, share: cur.totalMs ? Math.round(d.ms / cur.totalMs * 1000) / 10 : 0 })),
     byHour: cur.hours.map(round),
-    byWeekday: cur.weekdays.map(round)
+    byWeekday: cur.weekdays.map(round),
+    ...extra
   };
 }

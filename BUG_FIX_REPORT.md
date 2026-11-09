@@ -151,6 +151,20 @@ Nothing in this file claims real-browser or real-VPS testing that was not done; 
 - **Verified after the fix (2026-11-04):** server suite 356 tests, 354 pass, 0 fail, 2 skipped (the two real-Chrome-on-YouTube tests, which need `WL_EXT_E2E=1` and the internet); extension tests 70 of 70; `scripts/ui-check.mjs` 98 passed, 0 failed against a throwaway server with a temporary database.
 - **Re-verified (2026-11-09), no code change:** the targeted `settings-studio.test.js` first, 17 of 17 (A22, A23 and A24 included); then, one suite at a time with 11 GB free on the disk before and after: server suite 356 tests, 354 pass, 0 fail, 2 skipped (the same two `WL_EXT_E2E=1` tests); extension tests, all 8 files pass, 272 checks, 0 failed (counted per check as each file reports it, so not the same unit as the "70" above); `scripts/ui-check.mjs` 104 passed, 0 failed (the Settings page at all three sizes included) against a throwaway server with a temporary database.
 
+### A25. A print-ready report opened after 15 idle minutes showed only "unauthorized"
+- **Where:** `server/web/video.js` (Export -> Report for PDF), which opened `GET /api/video/:id/export?format=print` straight in a new tab.
+- **Cause:** the access cookie lives `ACCESS_TTL` seconds (900 by default) and the browser stops sending it when it expires. Dashboard pages renew it on a 401 (`api()` -> `/api/auth/refresh`), but a server-rendered page in a new tab has no script to do that, so after the dashboard had been idle for 15 minutes the tab showed `{"error":"unauthorized"}` instead of the report.
+- **Confirmed:** `server/test/reports-ui.test.js` deletes the access cookie the way the browser does on expiry; a request to the print address then answers 401, and with the refresh step removed from the new helper the print tab does not hold the report (2 steps fail). With the fix, all pass.
+- **Fix:** `WL.openPage(path)` in `server/web/app.js` makes one authenticated read first (renewing the sign-in if needed) and then opens the tab, within the same click. Video Details and Reports Studio both use it.
+- **Guard:** `reports-ui.test.js` ("Print / Save as PDF ... renewing the expired sign-in first").
+
+### A26. The test suites filled the disk with temporary folders
+- **Where:** `server/test/helpers.js` (`makeApp`), the backup / build / settings / notification / extension end-to-end tests, `scripts/lib/chrome-ext.mjs` (`close`) and `scripts/ui-check.mjs`.
+- **Found while checking disk space before this milestone:** 1,743 abandoned test folders (2.7 GB) in the system temp folder on a disk at 92%. Each server-suite run left about 40 behind: the tests created folders and never removed them, and the Chrome helpers scheduled the profile removal on an `unref`'d timer that never ran because the process exited first.
+- **Confirmed and cleaned:** every folder was matched to the exact prefix a test creates (`yt-build-`, `yt-bk-`, `yt-test-bk-`, `yt-bki-`, `wl-prof-`, `wl-ext-`, `wl-ui-`, ...) with `mkdtemp`'s six-character suffix, older than an hour, and not used by any running process, before it was removed. Free space went from 11 GB to 13 GB. Folders with other names were left alone.
+- **Fix:** `server/test/tmpdir.js` (`tmpDir(prefix)`) removes its folders when the test process exits; the Chrome helpers wait for Chrome to exit and then remove its profile.
+- **Verified:** running the build, backup and both headless-Chrome UI test files left the number of `yt-*` / `wl-*` folders unchanged (351 before, 351 after), and `ui-check.mjs` no longer leaves its profile behind.
+
 ### A21. The Security page asked for an icon that does not exist
 - **Where:** `server/web/index.html`, `server/web/security.js` (my own work from the Security Center milestone, never released).
 - **Confirmed:** the new `server/test/icons.test.js` listed `shield` as missing. An unknown icon name does not draw nothing: it draws the `circle-alert` fallback, so the sidebar entry showed a warning symbol.
@@ -165,6 +179,7 @@ Nothing in this file claims real-browser or real-VPS testing that was not done; 
 | B3 | The ribbon on a shared time axis made a ten-minute viewing a sliver when viewings were days apart. | Real data on the demo server | `timeline.test.js` ("lane axis") |
 | B4 | **`update.sh` could not tell a pre-release from its release.** It compared only `manifest.json`'s numeric `version` (the same `0.8.0` for beta.1, rc.1 and the final release) and `sort -V` ranks `0.8.0-beta.1` above `0.8.0`, so an update from a beta to the final release would have been refused as "already installed". | Found by the installer suite the moment the version was bumped to `0.8.0-beta.1` (3 failures) | `version_ge` now follows semver pre-release rules, the release name is read from `version_name`; 8 new assertions in `scripts/tests/test-installer.sh` |
 | B5 | **Signing out another browser made that browser's retry look like theft**, so the reuse detection would have signed out the browser you were still using. | Found by the new "sign out others" test the first time it ran | Tokens ended on purpose are marked `revoked=2` and refused quietly; `security-center.test.js` (B5, plus "however often it retries") |
+| B6 | Reports Studio's print page right-aligned only plain numbers, so durations sat left under right-aligned headings. | Reading the PDF produced by headless Chrome | the print page marks right-aligned columns explicitly |
 
 ## C. Known and unchanged
 
@@ -218,3 +233,24 @@ Two tests named specific migrations in a way that a new migration broke (the 007
 - A real VPS.
 - The A19 fix against real YouTube after the change (YouTube blocked the automated browser); it is verified by unit tests, the device-harness tests and a real-Chrome run on real YouTube's page before YouTube refused service, plus the stand-in page.
 - A20 is not reproduced and not fixed.
+
+## E. Verification results for Reports Studio (2026-11-09, Windows 11 development machine)
+
+Run one suite at a time (the disk had 13 GB free before and after; no heavy suites in parallel).
+
+| Check | Result |
+|---|---|
+| Server suite (`npm test`) | 374 tests: 372 passed, 0 failed, 2 skipped (the two real-Chrome-on-YouTube tests, which need `WL_EXT_E2E=1` and the internet). 18 of the 374 are new: `reports.test.js` (17: periods, validation, accuracy, midnight split, week / month vs Analytics, comparison, overlap-fair filters, device / video filters, CSV / JSON / print exports, saved reports, authorization, migration 009) and `reports-ui.test.js` (1 test, 47 headless-Chrome steps) |
+| Reports UI in headless Chrome (`reports-ui.test.js`) | 47 of 47 steps: periods and navigator, custom range check, filters and Clear, CSV and JSON downloads, print after an expired sign-in (A25), save / open / update / rename / delete, empty, error and phone layouts |
+| Extension unit tests (`tests/*.test.js`) | 8 files, 272 checks, 0 failed (no extension code was touched) |
+| Installer suite (`scripts/tests/test-installer.sh`) | 111 passed, 0 failed |
+| Dashboard check in headless Chrome (`ui-check.mjs`, throwaway server and database) | 113 passed, 0 failed (104 before + 9 for the Reports page at three sizes) |
+| Syntax check of every `.js` / `.mjs` / `.cjs`, `bash -n` of every shell script | 161 files, 0 errors; shell scripts clean |
+| Documentation links (`scripts/check-links.mjs`) | 196 checked, 0 problems |
+| `npm audit --omit=dev --audit-level=high` | passes; the same 3 moderate advisories as in D |
+| Database migrations | `009_saved_reports.sql` is additive (tested from a database as 008 left it); the 008 test now pins its own range |
+
+### Not verified
+- `shellcheck -S warning` over all shell scripts reports SC2034 ("appears unused") for variables in sourced libraries (`scripts/lib/common.sh`, `scripts/install.sh`). No shell script was changed in this work; these are not new.
+- The print page was checked as rendered by headless Chrome (`Page.printToPDF`), not printed on paper or saved through every browser's own dialog.
+- Not run on a VPS: the dashboard was served by a local throwaway server.

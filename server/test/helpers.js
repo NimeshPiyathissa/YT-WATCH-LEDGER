@@ -1,11 +1,9 @@
 import "./env.js";
 import argon2 from "argon2";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { openDb, migrate } from "../src/db.js";
 import { buildApp } from "../src/app.js";
 import { uuid } from "../src/lib/crypto.js";
+import { tmpDir } from "./tmpdir.js";
 
 export const PW = "correct horse battery staple";
 export const OWNER = "owner@example.com";
@@ -13,7 +11,7 @@ export const OWNER = "owner@example.com";
 export async function makeApp() {
   const db = openDb(); // in-memory SQLite
   migrate(db);
-  const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), "yt-test-bk-"));
+  const backupDir = tmpDir("yt-test-bk-");
   const app = await buildApp({ db, config: { backupDir, backupKeep: 3 } });
   await app.ready();
   return { app, db, backupDir };

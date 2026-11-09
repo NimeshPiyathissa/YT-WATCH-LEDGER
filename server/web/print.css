@@ -8,3 +8,10 @@ th { background: #f1f5f9; font-weight: 600; } thead { display: table-header-grou
 table.kv td:first-child { width: 40%; color: #475569; }
 #printBtn { float: right; padding: 8px 14px; border: 1px solid #0e7490; background: #0e7490; color: #fff; border-radius: 8px; font: inherit; cursor: pointer; }
 @media print { .noprint { display: none; } body { margin: 0; max-width: none; } }
+/* Reports Studio print report (GET /api/reports/export?format=print) */
+.report .eyebrow { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #0e7490; }
+.report td.r, .report th.r { text-align: right; white-space: nowrap; }
+.report .barcell { width: 35%; } .report .pbar { width: 100%; height: 8px; display: block; } .report .pbar-track { fill: #e2e8f0; } .report .pbar-fill { fill: #0e7490; }
+.report .warn { color: #9a3412; font-weight: 600; }
+.report h2 { break-after: avoid; }
+@media print { .report .pbar-fill { fill: #0e7490; } * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } @page { margin: 14mm; } }

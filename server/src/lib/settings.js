@@ -7,7 +7,7 @@
 //   Secrets (MASTER_KEY, COOKIE_SECRET) and filesystem paths are never read here.
 import { getGlobalRetention, setGlobalRetention } from "./retention.js";
 
-const PAGES = ["overview", "analytics", "history", "videos", "devices", "notifications", "health"];
+const PAGES = ["overview", "analytics", "reports", "history", "videos", "devices", "notifications", "health"];
 
 export const SETTINGS = {
   server_retention_days: { group: "retention", type: "int", min: 0, max: 3650, def: 0, unit: "days", label: "Keep watch history on the server for",

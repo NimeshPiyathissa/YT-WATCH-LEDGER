@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { openDb, migrate, knownMigrations } from "../src/db.js";
 import { createBackup, restoreBackup, listBackups, checkIntegrity } from "../src/lib/backup.js";
 import { uuid } from "../src/lib/crypto.js";
+import { tmpDir } from "./tmpdir.js";
 
-function tmp() { return fs.mkdtempSync(path.join(os.tmpdir(), "yt-bk-")); }
+function tmp() { return tmpDir("yt-bk-"); }
 function seededDb(dir) {
   const file = path.join(dir, "tracker.db");
   const db = openDb(file);

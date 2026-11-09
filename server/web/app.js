@@ -34,6 +34,12 @@
     const a = document.createElement("a"); a.href = URL.createObjectURL(await res.blob()); a.download = name;
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
+  // A page the server renders in a new tab (a print-ready report) has no script to refresh an expired sign-in, so it would show a bare
+  // "unauthorized". One authenticated read first renews the cookie if needed (BUG_FIX_REPORT A25); the tab opens within the same click.
+  async function openPage(path) {
+    await api("GET", "/api/auth/sessions");
+    window.open(path, "_blank", "noopener");
+  }
   const ERR = { invalid_credentials: "Wrong email or password.", bad_label: "Use a name of 1 to 80 characters.", bad_command: "The server rejected that command.", device_not_active: "Only approved devices can receive commands.",
     forbidden: "Not allowed.", not_found: "That item no longer exists.", not_pending: "That device was already handled.", confirmation_required: "Confirmation is required.", bad_retention: "Choose 0 to 3650 days." };
   const errText = e => (e && e.status === 429) ? "Too many attempts. Wait a few minutes." : ERR[e && e.message] || "Something went wrong (" + (e && e.message) + ").";
@@ -78,7 +84,7 @@
   };
   const clock = ms => { const t = Math.max(0, Math.floor((ms || 0) / 1000)), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), x = t % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); };
   // The small surface the Video Details module (video.js) uses; everything else in this file stays private.
-  window.WL = { applyPrefs, api, download, toast, errText, refreshed, guarded, confirmDialog: (...a) => confirmDialog(...a), empty: (...a) => empty(...a), head: (...a) => head(...a), chip: (...a) => chip(...a), loadDevices: () => loadDevices(), devices: () => devices };
+  window.WL = { applyPrefs, api, download, openPage, toast, errText, refreshed, guarded, confirmDialog: (...a) => confirmDialog(...a), empty: (...a) => empty(...a), head: (...a) => head(...a), chip: (...a) => chip(...a), loadDevices: () => loadDevices(), devices: () => devices };
   async function loadDevices() {
     devices = (await api("GET", "/api/devices")).slice().sort((a, b) => a.enrolled_at - b.enrolled_at);
     // the sidebar badge counts devices awaiting approval plus session deletion requests awaiting a decision
@@ -140,6 +146,7 @@
     if (vm) return pageGuard(() => window.WLVideo.render(app, vm[1]))();
     if (h === "#/videos") return pageGuard(() => window.WLVideo.renderList(app))();
     if (h === "#/analytics") return pageGuard(() => window.WLAnalytics.render(app))();
+    if (h === "#/reports" || h.indexOf("#/reports?") === 0) return pageGuard(() => window.WLReports.render(app, h))();
     if (h === "#/health") return pageGuard(() => window.WLHealth.render(app))();
     if (h === "#/security") return pageGuard(() => window.WLSecurity.render(app))();
     if (h === "#/notifications") return pageGuard(() => window.WLNotifications.render(app))();

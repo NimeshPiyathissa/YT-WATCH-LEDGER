@@ -2,8 +2,6 @@
 // does need a restart is shown read-only with the variable that controls it. Owner-only.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { makeApp, addOwner, login, enrollDevice, session, OWNER } from "./helpers.js";
 import { createBackup, listBackups } from "../src/lib/backup.js";
@@ -12,6 +10,7 @@ import { runDueBackup } from "../src/lib/backupSchedule.js";
 import { runHousekeeping } from "../src/lib/housekeeping.js";
 import { previewRetention, purgeAll } from "../src/lib/retention.js";
 import { openDb, migrate } from "../src/db.js";
+import { tmpDir } from "./tmpdir.js";
 
 const H = 3600000, DAY = 86400000;
 async function setup() {
@@ -26,7 +25,7 @@ async function setup() {
 
 /* ---- A22: found while auditing the existing settings ---- */
 test("A22: an invalid BACKUP_KEEP (not a number) used to delete every backup, including the one just made", async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "yt-keep-")), db = openDb(); migrate(db);
+  const dir = tmpDir("yt-keep-"), db = openDb(); migrate(db);
   for (const keep of [Number("abc"), undefined, 0, -3, 2.9, Infinity]) {
     const bk = path.join(dir, String(keep));
     await createBackup(db, bk, 5, new Date(Date.UTC(2026, 0, 1))); await createBackup(db, bk, 5, new Date(Date.UTC(2026, 0, 2)));

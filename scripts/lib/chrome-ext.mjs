@@ -72,9 +72,14 @@ export async function launch({ extensionDir, extraHostPermissions = ["http://127
   async function openTab(url) { return (await send("Target.createTarget", { url })).targetId; }
   async function closeTab(targetId) { try { await send("Target.closeTarget", { targetId }); } catch { /* gone */ } sessions.delete(targetId); }
   async function screenshot(targetId, file) { const r = await send("Page.captureScreenshot", { format: "png" }, await attach(targetId)); fs.writeFileSync(file, Buffer.from(r.data, "base64")); }
+  // Waits for Chrome to exit before removing its temporary profile and extension copy. (It used to schedule the removal on an unref'd
+  // timer, which never ran because the test process exited first: BUG_FIX_REPORT A26.)
   async function close() {
-    try { await send("Browser.close"); } catch { /* closing */ }
-    setTimeout(() => { try { proc.kill(); } catch { /* done */ } for (const d of [profile, ext]) { try { fs.rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 400 }); } catch { /* Chrome still releasing files; it is a temp folder */ } } }, 2500).unref();
+    const exited = proc.exitCode !== null ? Promise.resolve() : new Promise(ok => proc.once("exit", ok));
+    try { await Promise.race([send("Browser.close"), sleep(3000)]); } catch { /* closing */ }
+    await Promise.race([exited, sleep(5000)]);
+    if (proc.exitCode === null) { try { proc.kill(); } catch { /* done */ } await Promise.race([exited, sleep(2000)]); }
+    for (const d of [profile, ext]) { try { fs.rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 400 }); } catch { /* Chrome still releasing files; it is a temp folder */ } }
   }
   return { extensionId, send, targets, attach, evalIn, waitFor, serviceWorker, openTab, closeTab, screenshot, close, onEvent: fn => listeners.push(fn), sleep };
 }

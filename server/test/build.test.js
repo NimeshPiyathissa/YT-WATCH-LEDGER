@@ -3,15 +3,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { build, scan, BuildError } from "../../tools/build-extension.mjs";
+import { tmpDir } from "./tmpdir.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "yt-build-"));
+const tmp = () => tmpDir("yt-build-");
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
 
 // Minimal ZIP reader (central directory), so the test does not trust the writer it is checking.

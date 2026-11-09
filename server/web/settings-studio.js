@@ -8,7 +8,7 @@
   const $ = id => document.getElementById(id);
   let seq = 0;
   const SOURCE = { owner: ["on", "Your setting"], environment: ["info", "From the server's settings file"], default: ["", "Built-in default"] };
-  const PAGE_NAMES = { overview: "Overview", analytics: "Analytics", history: "History", videos: "Videos", devices: "Devices", notifications: "Notifications", health: "Health" };
+  const PAGE_NAMES = { overview: "Overview", analytics: "Analytics", reports: "Reports", history: "History", videos: "Videos", devices: "Devices", notifications: "Notifications", health: "Health" };
   const NAV = [["retention", "Data retention", "database"], ["backups", "Backups", "hard-drive"], ["security", "Pairing and access", "shield-check"], ["notifications", "Notifications", "bell"], ["preferences", "Your preferences", "settings"], ["restart", "Needs a restart", "server"]];
   const pill = (cls, text) => `<span class="pill ${cls}"><span class="dot"></span><span>${esc(text)}</span></span>`;
 

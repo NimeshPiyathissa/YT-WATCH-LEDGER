@@ -139,5 +139,5 @@
     await load();
   }
 
-  window.WLAnalytics = { render, deltaHtml, spark };
+  window.WLAnalytics = { render, deltaHtml, spark, hourBars, weekdayBars }; // the charts are shared with Reports (reports.js)
 })();

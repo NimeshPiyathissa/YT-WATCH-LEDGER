@@ -25,7 +25,7 @@ Each setting shows one of three labels:
 | A pairing code stays valid for | 1 to 120 minutes | 15 | `PAIRING_CODE_TTL_MIN` |
 | Lock out an address after N wrong pairing codes | 1 to 50 | 5 | `PAIRING_MAX_FAILS` |
 | Notifications: on/off per kind, thresholds, how long resolved ones are kept | see [NOTIFICATIONS.md](NOTIFICATIONS.md) | | none |
-| Open the dashboard on | Overview, Analytics, History, Videos, Devices, Notifications, Health | Overview | none |
+| Open the dashboard on | Overview, Analytics, Reports, History, Videos, Devices, Notifications, Health | Overview | none |
 | Compact tables | on / off | off | none |
 
 - **Shortening the retention window deletes data**, so before saving you are shown how many sessions would be removed and must confirm that number. If the data changed meanwhile, you are asked again with the new number. Lengthening it, or a window that removes nothing, saves without a prompt. Backups made earlier still contain the removed sessions, and devices keep their own copy.

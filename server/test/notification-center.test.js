@@ -2,13 +2,11 @@
 // lasts, clears itself when it ends, and a dismissed one stays dismissed for as long as the condition does.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { makeApp, addOwner, login, enrollDevice, OWNER } from "./helpers.js";
 import { openDb, migrate } from "../src/db.js";
 import { createBackup } from "../src/lib/backup.js";
 import { evaluateNotifications, pruneNotifications, DEFAULT_PREFS, getPrefs } from "../src/lib/notifications.js";
+import { tmpDir } from "./tmpdir.js";
 
 const H = 3600000;
 async function setup(extra = {}) {
@@ -25,11 +23,11 @@ test("migration 008 is additive: a database as v0.7.0 left it keeps every row an
   const db = openDb(); migrate(db, { upTo: "006_video_events.sql" });
   db.prepare("INSERT INTO admins(id,email,pw_hash,created_at) VALUES ('a1','o@example.com','x',1)").run();
   db.prepare("INSERT INTO devices(id,admin_id,label,status,enrolled_at) VALUES ('d1','a1','Laptop','active',1)").run();
-  const applied = migrate(db);
-  assert.deepEqual(applied.slice(-2), ["007_device_consents_sync_diagnostics.sql", "008_notifications.sql"]);
+  const applied = migrate(db, { upTo: "008_notifications.sql" }); // later migrations are checked by their own tests
+  assert.deepEqual(applied, ["007_device_consents_sync_diagnostics.sql", "008_notifications.sql"]);
   assert.equal(db.prepare("SELECT label FROM devices WHERE id='d1'").get().label, "Laptop");
   assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE name='notifications'").get());
-  assert.deepEqual(migrate(db), [], "running it again changes nothing");
+  assert.deepEqual(migrate(db, { upTo: "008_notifications.sql" }), [], "running it again changes nothing");
 });
 
 test("every endpoint is owner-only", async () => {
@@ -131,7 +129,7 @@ test("backups: none, then stale, then healthy", async () => {
   s.evalNow(Date.now() + 5 * 24 * H);
   const stale = await s.ofKind("backup");
   assert.equal(stale.length, 1); assert.equal(stale[0].key, "backup:stale");
-  const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), "yt-notif-")); // scheduled backups switched off: nothing to be stale
+  const dir2 = tmpDir("yt-notif-"); // scheduled backups switched off: nothing to be stale
   evaluateNotifications(s.db, { config: { backupDir: s.backupDir, backupIntervalHours: 0 }, hub: s.app.hub, now: Date.now() + 5 * 24 * H });
   assert.equal((await s.ofKind("backup")).length, 0); assert.ok(dir2);
 });

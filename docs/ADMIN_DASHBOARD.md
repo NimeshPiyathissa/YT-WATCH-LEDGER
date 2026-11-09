@@ -35,6 +35,10 @@ The pairing lockout is held in memory: restarting the server clears it. The per-
 - **Also shown:** sessions, videos, active days, average per active day, longest session, watch time by hour of the day and day of the week, time per device, top channels and top videos (each opens Video Details).
 - Days, weeks (Monday to Sunday) and months follow **Sri Lanka time**; an interval that crosses midnight is split between the two days. API: `GET /api/analytics?range=7|30|90|365|today` or `?from=&to=` (milliseconds), `granularity=auto|day|week|month`, `device=<id>`.
 
+## Reports Studio (v0.8)
+
+**Reports** (sidebar → Insights) turns the same numbers into daily, weekly, monthly and custom-range reports, with device, channel and video filters, saved report configurations, CSV and JSON downloads and a print-ready page for **Save as PDF**. A report and the Analytics page always agree: they share one engine. Details: [`REPORTS.md`](REPORTS.md).
+
 ## Health Center (v0.8)
 
 **Health** (sidebar → System) shows how the server is doing: uptime, version, CPU, memory, disk, database connection and speed, devices online, sync errors and waiting uploads, and the age of the newest backup. It refreshes every 15 seconds. Each problem (disk nearly full, no recent backup, a database that does not answer, a device reporting a sync error) shows what to do about it. Only the signed-in owner can read it (`GET /api/system/health`); it reveals no file path, address or secret. The public `/api/health` stays a bare `{ "ok": true }` for load balancers.

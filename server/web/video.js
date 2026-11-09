@@ -525,7 +525,7 @@
     $("vdExportMenu").onclick = WL.guarded(async e => {
       const b = e.target.closest("[data-ex]"); if (!b) return; $("vdExportMenu").hidden = true; $("vdExport").setAttribute("aria-expanded", "false");
       const [fmt, scope] = b.dataset.ex.split(":"), url = base() + "/export" + query({ format: fmt, scope: scope || "" });
-      if (fmt === "print") { window.open(url + "&print=1", "_blank", "noopener"); return; }
+      if (fmt === "print") { await WL.openPage(url + "&print=1"); return; } // renews an expired sign-in first (A25)
       await WL.download(url, `video-${s.videoId}-${scope || "all"}.${fmt}`);
     });
     document.addEventListener("click", s.docClick = e => { if (!alive(s)) { document.removeEventListener("click", s.docClick); return; } if (!e.target.closest(".vd-menu")) { const m = $("vdExportMenu"); if (m && !m.hidden) { m.hidden = true; $("vdExport").setAttribute("aria-expanded", "false"); } } });
