@@ -16,7 +16,7 @@ pass() { N=$((N + 1)); printf 'ok %d - %s\n' "$N" "$1"; }
 flunk() { N=$((N + 1)); FAILS=$((FAILS + 1)); printf 'not ok %d - %s\n' "$N" "$1"; [ -n "${2:-}" ] && printf '#   %s\n' "$2"; }
 check() { local name="$1"; shift; if "$@" >/dev/null 2>&1; then pass "$name"; else flunk "$name" "command failed: $*"; fi; }
 check_not() { local name="$1"; shift; if "$@" >/dev/null 2>&1; then flunk "$name" "expected failure: $*"; else pass "$name"; fi; }
-contains() { printf '%s' "$1" | grep -qF -- "$2"; }
+contains() { grep -qF -- "$2" <<< "$1"; }   # a here-string, not a pipe: with pipefail, printf | grep -q fails when grep stops early
 cleanup() { [ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2>/dev/null; rm -rf "$TMPBASE"; }
 trap cleanup EXIT
 
@@ -214,6 +214,7 @@ mkrel() {
   local d="$WL_PREFIX/releases/$1"; mkdir -p "$d/server/src" "$d/server/node_modules" "$TMPBASE/src-$1/server"
   printf '{ "version": "%s" }\n' "$1" > "$d/manifest.json"; printf '%s\n' "$1" > "$d/.install-complete"
   printf 'process.exit(%s);\n' "$2" > "$d/server/src/migrate.js"; cp "$d/manifest.json" "$TMPBASE/src-$1/manifest.json"
+  printf '{ "version": "%s" }\n' "$1" > "$d/server/package.json"   # update.sh confirms the running release says the version it installed
 }
 skip() { N=$((N + 1)); printf 'ok %d - # SKIP %s\n' "$N" "$1"; }
 last_hist() { tail -n 1 "$HIST" 2>/dev/null; }
@@ -262,7 +263,19 @@ rel_manifest() {
   printf '{ "name": "watch-ledger-server", "version": "%s" }\n' "$4" > "$1/server/package.json"; printf 'process.exit(%s);\n' "$5" > "$1/server/src/migrate.js"
 }
 # fake_installed <releases/NAME> <marker> <numeric> <version_name> <package.json version>: a finished release folder (as an older update.sh left it)
-fake_installed() { rel_manifest "$1" "$3" "$4" "$5" 0; mkdir -p "$1/server/node_modules"; printf '%s\n' "$2" > "$1/.install-complete"; }
+fake_installed() {
+  if [ "${SYMLINKS:-0}" = "1" ]; then
+    # update.sh backs up with the INSTALLED release's server/scripts/backup.js: link the real code in (removing the fake release
+    # later removes only these links, never what they point at)
+    mkdir -p "$1/server"
+    if [ -n "$4" ]; then printf '{ "version": "%s", "version_name": "%s" }\n' "$3" "$4" > "$1/manifest.json"; else printf '{ "version": "%s" }\n' "$3" > "$1/manifest.json"; fi
+    printf '{ "name": "watch-ledger-server", "version": "%s" }\n' "$5" > "$1/server/package.json"
+    for d in src scripts migrations node_modules; do ln -s "$REPO/server/$d" "$1/server/$d"; done
+  else
+    rel_manifest "$1" "$3" "$4" "$5" 0; mkdir -p "$1/server/node_modules"
+  fi
+  printf '%s\n' "$2" > "$1/.install-complete"
+}
 T29="$TMPBASE/a29"; mkdir -p "$T29"
 MF="$T29/mf"; mkdir -p "$MF"
 mfok() { printf '%s\n' "$1" > "$MF/manifest.json"; release_manifest_ok "$MF" "$2"; }
@@ -342,8 +355,9 @@ grep -q "awk -v f=\"\$asset\" '\$2 == f || \$2 == \"\\*\" f {print \$1; exit}'" 
   && pass "update.sh's own SHA256SUMS lookup finds the tarball's checksum" || flunk "SHA256SUMS lookup" "want=$WANT"
 [ "$(tar --force-local -tzf "$RB/$TGZ" | cut -d/ -f1 | sort -u)" = "watch-ledger-v${RV}" ] && pass "the tarball has exactly one top-level folder, watch-ledger-v${RV}/" || flunk "top-level folder"
 out="$(bash "$REPO/scripts/update.sh" --from-tarball "$RB/$TGZ" --sha256 "$WANT" --force --dry-run --yes 2>&1)"; code=$?
-[ "$code" = "0" ] && contains "$out" "Checksum verified" && contains "$out" "Target version:    ${RV}" && contains "$out" "Would take a verified backup" \
-  && pass "this update.sh accepts the built tarball (checksum, unpacking, manifest) and plans the update" || flunk "update.sh accepts the release" "code=$code $(printf '%s' "$out" | tail -4)"
+miss=""; for want in "Checksum verified" "Target version:    ${RV}" "Would take a verified backup"; do contains "$out" "$want" || miss="${miss}[${want}]"; done
+[ "$code" = "0" ] && [ -z "$miss" ] && pass "this update.sh accepts the built tarball (checksum, unpacking, manifest) and plans the update" \
+  || flunk "update.sh accepts the release" "code=$code missing=${miss:-none} bytes=${#out} | $(printf '%s' "$out" | grep -E 'Target version|Checksum|Would take|Already|die|refus|inconsistent' | tr '\n' '|' | cut -c1-400)"
 out="$(bash "$REPO/scripts/update.sh" --from-tarball "$RB/$TGZ" --sha256 "$(printf '%s' "$WANT" | tr '0-9a-f' '1-9a-f0')" --dry-run --yes 2>&1)"; code=$?
 [ "$code" != "0" ] && contains "$out" "Checksum mismatch" && pass "a tarball with a different checksum is refused" || flunk "checksum mismatch refused"
 # a v0.7.0 server runs v0.7.0's update.sh (exact copies in scripts/tests/fixtures/v0.7.0): it must accept the new tarball too
