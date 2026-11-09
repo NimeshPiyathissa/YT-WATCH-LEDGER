@@ -11,7 +11,7 @@
 | **Update history** | every real update attempt made with `scripts/update.sh` since v0.8.0, newest first: from and to versions, the result (**Updated**, **Rolled back**, **Failed**, **Cancelled**), where it stopped, whether anything had been changed, and the name of its pre-update backup |
 | **Pre-update backups** | the backups `update.sh` takes into `backups/pre-update/` before every update (never pruned). **Verify** checks one without changing anything: integrity, which release made it, and whether this server's key can read it (audited) |
 | **How to update** | copyable commands, filled in with the release the check found (or `vX.Y.Z`) |
-| **How to roll back** | the releases still installed (`update.sh` keeps the last three) and copyable commands to switch back to the previous one, and, only if needed, to restore the pre-update backup |
+| **How to roll back** | the releases still installed (`update.sh` keeps the last three; a folder whose name differs from the version it holds is marked, see [UPGRADING.md](UPGRADING.md)) and copyable commands to switch back to the previous one, and, only if needed, to restore the pre-update backup |
 
 Commands use the installer's standard locations (`/opt/watch-ledger`, `/var/lib/watch-ledger`, service `watch-ledger`). They are built only from values checked to be real version numbers or backup file names, so nothing from the network or from a file can end up in a command. A test checks that every script and option they name exists.
 
@@ -33,18 +33,18 @@ What is offered:
 
 **A downgrade is never offered**, nor the version already running. Release tags are parsed strictly as Semantic Versions and ordered by SemVer precedence (`0.8.0-beta.2 < 0.8.0-beta.10 < 0.8.0-rc.1 < 0.8.0`), the same order `update.sh` uses. Only the release's version, name, date and a link to its GitHub page are kept; release notes are opened on GitHub, never shown in the dashboard.
 
-`sudo ./scripts/update.sh --check` asks GitHub for the newest **stable** release only (GitHub's "latest release" excludes pre-releases). To move from one pre-release to a newer one, name it: `sudo ./scripts/update.sh --version v0.8.0-rc.1`.
+`sudo bash scripts/update.sh --check` asks GitHub for the newest **stable** release only (GitHub's "latest release" excludes pre-releases). To move from one pre-release to a newer one, name it: `sudo bash scripts/update.sh --version v0.8.0-rc.1`.
 
 ## Updating
 
 ```bash
 cd /opt/watch-ledger/current
-sudo ./scripts/update.sh --version vX.Y.Z --dry-run   # what would happen; changes nothing
-sudo ./scripts/update.sh --version vX.Y.Z             # checksum → backup → install beside → migrate → switch → health check
-sudo ./scripts/health-check.sh
+sudo bash scripts/update.sh --version vX.Y.Z --dry-run   # what would happen; changes nothing
+sudo bash scripts/update.sh --version vX.Y.Z             # checksum → backup → install beside → migrate → switch → health check
+sudo bash scripts/health-check.sh
 ```
 
-If the new release does not become healthy, `update.sh` switches the code back to the previous release by itself and names the pre-update backup. Details: [BACKUP_RECOVERY.md](BACKUP_RECOVERY.md#updating).
+If the new release does not become healthy, or the service turns out not to be running the version just installed, `update.sh` switches the code back to the previous release by itself and names the pre-update backup; it never reports an update as done otherwise. Every version gets its own folder (`releases/<version>`); a folder that holds another version is never reused. Commands use `bash scripts/...` so they also work on a v0.7.0 server, whose scripts are not executable (see [KNOWN_ISSUES.md](KNOWN_ISSUES.md) section 7). Details: [BACKUP_RECOVERY.md](BACKUP_RECOVERY.md#updating).
 
 ## Rolling back
 
@@ -53,11 +53,11 @@ If the new release does not become healthy, `update.sh` switches the code back t
    ls /opt/watch-ledger/releases
    sudo ln -sfn /opt/watch-ledger/releases/<previous version> /opt/watch-ledger/current
    sudo systemctl restart watch-ledger
-   cd /opt/watch-ledger/current && sudo ./scripts/health-check.sh
+   cd /opt/watch-ledger/current && sudo bash scripts/health-check.sh
    ```
 2. **Database too**, only if the data must return to exactly how it was before the update (this discards everything recorded since). Roll the code back first, then:
    ```bash
-   cd /opt/watch-ledger/current && sudo ./scripts/restore.sh /var/lib/watch-ledger/backups/pre-update/<backup file>
+   cd /opt/watch-ledger/current && sudo bash scripts/restore.sh /var/lib/watch-ledger/backups/pre-update/<backup file>
    ```
 
 There is no rollback button and no rollback script: rolling back stays a deliberate step on the server.

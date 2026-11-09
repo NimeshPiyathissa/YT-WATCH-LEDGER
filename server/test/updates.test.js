@@ -156,11 +156,11 @@ function scriptOptions(file) {
 test("instructions are version-specific and only name scripts and options that exist", () => {
   const i = instructionsFor({ installed: "0.8.0-beta.1", target: "0.8.1", previous: "0.8.0-beta.1", backup: "tracker-20261109T020000Z.db" });
   const all = [...i.update, ...i.rollbackCode, ...i.rollbackData].map(s => s.cmd);
-  assert.ok(all.includes("sudo ./scripts/update.sh --version v0.8.1"));
+  assert.ok(all.includes("sudo bash scripts/update.sh --version v0.8.1"));
   assert.ok(all.includes("sudo ln -sfn /opt/watch-ledger/releases/0.8.0-beta.1 /opt/watch-ledger/current"));
-  assert.ok(all.some(c => c.endsWith("sudo ./scripts/restore.sh /var/lib/watch-ledger/backups/pre-update/tracker-20261109T020000Z.db")));
+  assert.ok(all.some(c => c.endsWith("sudo bash scripts/restore.sh /var/lib/watch-ledger/backups/pre-update/tracker-20261109T020000Z.db")));
   const opts = { "update.sh": scriptOptions("update.sh"), "restore.sh": scriptOptions("restore.sh"), "health-check.sh": scriptOptions("health-check.sh") };
-  for (const c of all) for (const m of c.matchAll(/\.\/scripts\/([\w-]+\.sh)((?: --?[\w-]+(?: [^\s-][^\s]*)?)*)/g)) {
+  for (const c of all) for (const m of c.matchAll(/bash scripts\/([\w-]+\.sh)((?: --?[\w-]+(?: [^\s-][^\s]*)?)*)/g)) {
     assert.ok(fs.existsSync(path.join(ROOT, "scripts", m[1])), m[1] + " exists");
     for (const o of m[2].match(/--[\w-]+/g) || []) assert.ok(opts[m[1]].has(o), `${m[1]} accepts ${o}`);
   }
@@ -188,6 +188,10 @@ test("installed releases are read from the installer's releases folder; unfinish
   const r = installedReleases(path.dirname(serverRoot), "0.8.0-beta.1");
   assert.deepEqual(r, { layout: "installer", items: [{ version: "0.8.0-beta.1", current: true }, { version: "0.7.0", current: false }] });
   assert.deepEqual(installedReleases(ROOT, "0.8.0-beta.1"), { layout: "checkout", items: [] });
+  // a folder named 0.8.0 that holds 0.8.0-rc.1 (how v0.7.0's update.sh installed it, A29) says so
+  const { rel } = fakeInstall(), d = path.join(rel, "0.8.0");
+  fs.mkdirSync(path.join(d, "server"), { recursive: true }); fs.writeFileSync(path.join(d, "manifest.json"), JSON.stringify({ version: "0.8.0", version_name: "0.8.0-rc.1" })); fs.writeFileSync(path.join(d, ".install-complete"), "0.8.0");
+  assert.deepEqual(installedReleases(d, "0.8.0-rc.1").items.find(r => r.version === "0.8.0"), { version: "0.8.0", current: true, holds: "0.8.0-rc.1" });
 });
 
 /* ---- the routes ---- */
@@ -252,7 +256,7 @@ test("with the check on: a beta is offered stable releases only, until pre-relea
   assert.equal(r.body.latestPrerelease.version, "0.8.0-rc.1"); assert.equal(r.body.recommended.version, "0.8.0");
   const g = (await s.api("GET", "/api/updates")).body;
   assert.equal(g.check.last.recommended.version, "0.8.0"); assert.equal(g.check.last.stale, false);
-  assert.ok(g.instructions.update.some(x => x.cmd === "sudo ./scripts/update.sh --version v0.8.0"), "the commands are filled in for the release found");
+  assert.ok(g.instructions.update.some(x => x.cmd === "sudo bash scripts/update.sh --version v0.8.0"), "the commands are filled in for the release found");
   const log = s.db.prepare("SELECT detail FROM audit_log WHERE action='update_check'").all().map(x => JSON.parse(x.detail));
   assert.equal(log.length, 2); assert.equal(log[0].recommended, "0.8.0");
 });

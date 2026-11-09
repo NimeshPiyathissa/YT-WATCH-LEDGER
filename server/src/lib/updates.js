@@ -72,7 +72,12 @@ export function installedReleases(appRoot, currentVersion) {
   const items = names.map(n => parseVersion(n) && n === parseVersion(n).text ? n : null).filter(Boolean)
     .filter(n => { try { return fs.statSync(path.join(dir, n, ".install-complete")).isFile(); } catch { return false; } })
     .sort((a, b) => compareVersions(b, a))
-    .map(v => ({ version: v, current: v === currentVersion || v === path.basename(appRoot) }));
+    .map(v => {
+      // what the folder really holds: v0.7.0's update.sh named every 0.8.0 pre-release "0.8.0" (A29; repaired by the next update)
+      let holds = null;
+      try { const m = JSON.parse(fs.readFileSync(path.join(dir, v, "manifest.json"), "utf8")); const h = parseVersion(String(m.version_name || m.version || "")); holds = h ? h.text : null; } catch { holds = null; }
+      return { version: v, current: v === currentVersion || v === path.basename(appRoot), ...(holds && holds !== v ? { holds } : {}) };
+    });
   return { layout: "installer", items };
 }
 
@@ -113,7 +118,8 @@ export async function fetchReleases({ url = RELEASES_API, fetchImpl = globalThis
 }
 // Copyable, version-specific commands for the installer's standard layout. Built only from values that were validated as versions or
 // backup file names, so nothing from the network or from the history file can end up in a shell command. Each command names a script
-// and options that exist (server/test/updates.test.js checks them against scripts/*.sh).
+// and options that exist (server/test/updates.test.js checks them against scripts/*.sh). Scripts are run with `bash` so the commands also
+// work where a release was unpacked without executable bits (every v0.7.0 install: BUG_FIX_REPORT A30).
 export const LAYOUT = { prefix: "/opt/watch-ledger", var: "/var/lib/watch-ledger", service: "watch-ledger" };
 const BACKUP_NAME = /^tracker-\d{8}T\d{6}(\d{3})?Z(-\d+)?\.db$/;
 export function instructionsFor({ installed, target = null, previous = null, backup = null }) {
@@ -122,21 +128,21 @@ export function instructionsFor({ installed, target = null, previous = null, bac
   const tag = tgt ? "v" + tgt.text : "vX.Y.Z";
   const update = [
     { text: "Open the installed release (the scripts live there).", cmd: inCurrent },
-    { text: "Optional: ask the script which release is the newest stable one.", cmd: "sudo ./scripts/update.sh --check" },
-    { text: "Preview what would happen, without changing anything.", cmd: `sudo ./scripts/update.sh --version ${tag} --dry-run` },
-    { text: `Update${tgt ? " to " + tgt.text : ""}. The script verifies the download checksum, backs up the database into backups/pre-update, installs beside the current release, migrates, switches and checks health; if the health check fails it switches the code back by itself.`, cmd: `sudo ./scripts/update.sh --version ${tag}` },
-    { text: "Check the result.", cmd: "sudo ./scripts/health-check.sh" }
+    { text: "Optional: ask the script which release is the newest stable one.", cmd: "sudo bash scripts/update.sh --check" },
+    { text: "Preview what would happen, without changing anything.", cmd: `sudo bash scripts/update.sh --version ${tag} --dry-run` },
+    { text: `Update${tgt ? " to " + tgt.text : ""}. The script verifies the download checksum, backs up the database into backups/pre-update, installs beside the current release, migrates, switches and checks health; if the health check fails it switches the code back by itself.`, cmd: `sudo bash scripts/update.sh --version ${tag}` },
+    { text: "Check the result.", cmd: "sudo bash scripts/health-check.sh" }
   ];
   const prevDir = prev ? `${LAYOUT.prefix}/releases/${prev.text}` : `${LAYOUT.prefix}/releases/<previous version>`;
   const rollbackCode = [
     { text: "List the releases that are still installed.", cmd: `ls ${LAYOUT.prefix}/releases` },
     { text: `Point the server back at ${prev ? prev.text : "the previous release"}.`, cmd: `sudo ln -sfn ${prevDir} ${LAYOUT.prefix}/current` },
     { text: "Restart the service.", cmd: `sudo systemctl restart ${LAYOUT.service}` },
-    { text: "Check it is healthy.", cmd: `${inCurrent} && sudo ./scripts/health-check.sh` }
+    { text: "Check it is healthy.", cmd: `${inCurrent} && sudo bash scripts/health-check.sh` }
   ];
   const file = backup && BACKUP_NAME.test(backup) ? backup : "<pre-update backup>";
   const rollbackData = [
-    { text: "Only if the data must return to exactly how it was before the update (this discards everything recorded since). Roll the code back first, then:", cmd: `${inCurrent} && sudo ./scripts/restore.sh ${LAYOUT.var}/backups/pre-update/${file}` }
+    { text: "Only if the data must return to exactly how it was before the update (this discards everything recorded since). Roll the code back first, then:", cmd: `${inCurrent} && sudo bash scripts/restore.sh ${LAYOUT.var}/backups/pre-update/${file}` }
   ];
   return { installed: cur ? cur.text : null, target: tgt ? tgt.text : null, previous: prev ? prev.text : null, backup: file === "<pre-update backup>" ? null : file, update, rollbackCode, rollbackData };
 }

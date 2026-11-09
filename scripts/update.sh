@@ -149,11 +149,13 @@ main() {
   else die "Say what to install: --version vX.Y.Z, --from-dir DIR or --from-tarball FILE (or --check)."; fi
   local target; target="$(source_version "$SRC")"
   valid_semver "$target" || die "The target has no valid version."
+  release_manifest_ok "$SRC" "$target" || die "The target's manifest.json is inconsistent (\"version\" must be the number of \"version_name\"). Nothing was changed."
   info "Target version:    ${target}"
   HIST_TO="$target"
   if [ "$target" = "$installed" ] && [ "$FORCE" = "0" ]; then ok "Already running ${installed}. Use --force to reinstall it."; exit 0; fi
   if ! version_ge "$target" "$installed" && [ "$ALLOW_DOWNGRADE" = "0" ]; then die "${target} is older than the installed ${installed}. A downgrade can be incompatible with the migrated database; use --allow-downgrade only if you know it is safe."; fi
   confirm "Update Watch Ledger ${installed} -> ${target}? A backup is taken first." || { HIST_RESULT="cancelled"; die "Cancelled. Nothing was changed."; }
+  normalize_current_release   # a release folder named after the wrong version gets its real name first (A29)
   PREVIOUS_REL="$(readlink -f "${WL_PREFIX}/current" 2>/dev/null || true)"
 
   # ---- 2. backup (a separate folder that nothing ever prunes)
@@ -189,7 +191,8 @@ main() {
   STAGE="verifying"; step 5 "HEALTH CHECK"
   if [ "$WL_DRY_RUN" = "1" ]; then info "Would wait for the health endpoint"; else
     health_wait 60 || rollback "The new release did not become healthy within 60 seconds."
-    ok "The service is healthy on ${target}"
+    verify_running "$new_rel" "$target" || rollback "The service answers, but ${target} is not the release it is running."
+    ok "The service is healthy and running ${target}"
   fi
 
   # ---- 6. tidy: old release CODE only (never data, keys or backups)

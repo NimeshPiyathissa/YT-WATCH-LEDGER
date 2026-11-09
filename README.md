@@ -166,6 +166,9 @@ A cinematic 16:9 (75 s) and a vertical 9:16 (56 s) overview are attached to the 
 | Live viewing and consent | [LIVE_MONITORING.md](docs/LIVE_MONITORING.md) |
 | How the extension syncs | [SYNC_ENGINE.md](docs/SYNC_ENGINE.md) |
 | Upgrading and rolling back | [UPGRADING.md](docs/UPGRADING.md) |
+| Update Manager (versions, update history, rollback commands) | [UPDATES.md](docs/UPDATES.md) |
+| Reports Studio | [REPORTS.md](docs/REPORTS.md) |
+| Building and publishing a release | [RELEASING.md](docs/RELEASING.md) |
 | Full behaviour reference | [FEATURES.md](docs/FEATURES.md) |
 | Known issues | [KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) |
 | Manual browser test lists | [general](docs/MANUAL_TEST_CHECKLIST.md), [Video Details](docs/MANUAL_TEST_CHECKLIST_VIDEO_DETAILS.md), [extension](docs/MANUAL_TEST_CHECKLIST_EXTENSION.md) |

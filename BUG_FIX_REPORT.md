@@ -183,6 +183,19 @@ Nothing in this file claims real-browser or real-VPS testing that was not done; 
 - **Fix:** the limit is now 480 s (test 500 s), with the measured times in a comment.
 - **Not fixed:** a run that is killed from outside still cannot run its own clean-up (the sandbox server and its temporary folder stay). That only happens when a run is killed; see "Remaining limitations" in G.
 
+### A29. A release candidate to final update would have kept running the release candidate, and reported success
+- **Where:** `scripts/lib/common.sh` (`deploy_release_dir`), `scripts/update.sh`, together with v0.7.0's `update.sh`.
+- **Cause:** Chrome allows only numbers in `manifest.json`'s `"version"`, so every 0.8.0 pre-release has `"version": "0.8.0"` and only `"version_name"` (`0.8.0-rc.1`) tells it apart. v0.7.0's `update.sh` reads only `"version"`, so updating a v0.7.0 server to v0.8.0-rc.1 installs it into `releases/0.8.0`. When the final 0.8.0 came, rc.1's `deploy_release_dir` would find `releases/0.8.0` marked complete and reuse it: the update would report success while the release candidate kept running, and its "previous release" would be the same folder, so nothing to roll back to.
+- **Confirmed:** by running v0.7.0's `source_version` on this release (it reads `0.8.0`) and by `deploy_release_dir` in a sandbox (it answered "Release 0.8.0 already deployed" for a folder holding 0.8.0-rc.1).
+- **Fix:** `release_manifest_ok` checks both `version` and `version_name`. `update.sh` refuses a release whose two fields disagree; before anything changes it renames a running release folder named after another version to the version it holds and points `current` at it (`normalize_current_release`); `deploy_release_dir` reuses a folder only when its manifest and `.install-complete` name the exact version, sets aside (never reuses) one that holds another version, and refuses outright if that folder is the running release; after the health check `verify_running` confirms that `current` points at the new release, its manifest and `server/package.json` name the target version and, on a real server, the service's working folder is inside it, otherwise it rolls back. The Updates page marks a folder whose name differs from what it holds.
+- **Guard:** installer suite: the manifest check, an inconsistent release refused, a mismatched folder never reused (these run everywhere); and on Linux, real runs of v0.7.0-style rc -> final, rc -> final with a failed migration (rolls back to the renamed rc), a release whose server is another version (never reported as done), rc.1 -> rc.2, and the running-release guard. Those five need symbolic links: **not run on this Windows machine** (reported as skipped); they run in CI on Ubuntu.
+
+### A30. The release's scripts were not executable, so the documented commands failed on every v0.7.0 server
+- **Where:** git (`core.fileMode=false` on the Windows machine that made the commits) and the published `watch-ledger-v0.7.0.tar.gz`.
+- **Confirmed:** the published v0.7.0 tarball (downloaded and listed) has `-rw-rw-r--` for `install.sh` and every `scripts/*.sh`. On a server, `sudo ./scripts/update.sh` (and `backup.sh`, `restore.sh`, `health-check.sh`) answers "command not found"; only `sudo bash scripts/...` works. Nothing scheduled runs these scripts (backups run inside the server), so the effect is failed manual commands, not silent breakage.
+- **Fix:** the six scripts that are run directly are marked executable in git (`100755`); `tools/build-release.mjs` writes file modes from git into the tarball whatever machine builds it; the Updates page's commands and the upgrade guide use `sudo bash scripts/...`, which works on v0.7.0 servers too. A v0.7.0 server's first update must be run with `bash` (docs/UPGRADING.md, docs/KNOWN_ISSUES.md section 7).
+- **Guard:** `release.test.js` checks the six scripts are 0755 in the built tarball and readable by GNU tar as such.
+
 ### A21. The Security page asked for an icon that does not exist
 - **Where:** `server/web/index.html`, `server/web/security.js` (my own work from the Security Center milestone, never released).
 - **Confirmed:** the new `server/test/icons.test.js` listed `shield` as missing. An unknown icon name does not draw nothing: it draws the `circle-alert` fallback, so the sidebar entry showed a warning symbol.
@@ -316,3 +329,28 @@ Run one suite at a time (the disk had 13 GB free before and after; no heavy suit
 - `update.sh --check` still only knows stable releases (see the audit above).
 - A test run killed from outside cannot clean up after itself (A28).
 - `v0.7.0` servers have no history: entries start with the first update made by the v0.8.0 `update.sh`.
+
+## H. Release-readiness blockers for v0.8.0-rc.1 (2026-11-09, Windows 11 development machine, 4 GB RAM)
+
+### What changed
+- A29 and A30 (above).
+- **Release packaging:** `tools/build-release.mjs` and `docs/RELEASING.md`. Tested by `server/test/release.test.js` (version consistency, files that must never ship, the secret scanner, the tar writer read back by GNU tar, a full build with checksums, one top-level folder, modes and versions, byte-for-byte reproducibility, tamper detection, refusal of a tracked `.env` or private key) and by the installer suite (the built tarball is accepted by this `update.sh` and by **v0.7.0's** `update.sh`, kept as exact copies in `scripts/tests/fixtures/v0.7.0/`; `update.sh`'s own `SHA256SUMS` lookup finds it; a wrong checksum is refused).
+- **Version metadata:** `0.8.0-rc.1` in `manifest.json` (`version_name`; `version` stays `0.8.0`), `server/package.json` and `server/package-lock.json`. The published v0.7.0 release and branch are unchanged.
+- **Docs:** `docs/UPGRADING.md` rewritten (migrations 007, 008, 009; v0.7.0 -> rc.1 with `bash`; the folder name; rollback; RC limits), `docs/KNOWN_ISSUES.md` reviewed for 0.8.0-rc.1 (sections 7-10), `docs/UPDATES.md`, `docs/RELEASING.md`, `CHANGELOG.md`, `README.md` links.
+- **Test infrastructure:** Chrome profile removal retries for up to 30 s (it could still leave profiles under heavy load).
+
+### Verification (suites run one at a time)
+| Check | Result |
+|---|---|
+| Server suite (`npm test`), last complete run on the code with every blocker fix | 403 tests: 401 passed, 0 failed, 2 skipped (the two `WL_EXT_E2E=1` real-YouTube tests). New: `release.test.js` 7 tests; `updates.test.js` 21 (one extended). Left 3 Chrome profiles in the temp folder (heavy load), which led to the 30 s removal window. |
+| Server suite, run again after that last test-infrastructure change | **Did not complete cleanly.** With about 0.5 GB of free memory left on the 4 GB machine, the installer test hit its 480 s limit and the dashboard check (`ui.test.js`) failed, and the run was then stopped by the session for low memory. Its leftover test processes were stopped by hand; its sandbox folder `tmp.ZvlxogoeTm` was left in place. Not a code result; to be repeated with enough free memory or in CI. |
+| Installer suite (`scripts/tests/test-installer.sh`), on its own | 142 "ok": 131 passed and 11 skipped, 0 failed (plus the existing "env file mode (not Linux)" skip). The 11 skipped are the real update runs that switch releases (5 for the update history, 6 for A29): they need symbolic links, which this Windows machine cannot create; they run on Linux. |
+| Extension unit tests | 8 files, 272 checks, 0 failed |
+| `scripts/ui-check.mjs` (throwaway server, version 0.8.0-rc.1) | 122 passed, 0 failed; no profile left behind |
+| Syntax (169 files), `bash -n`, `shellcheck` with CI's options, documentation links (207) | all clean |
+
+### Not verified
+- The 11 Linux-only installer runs (A29 real runs and the update-history real runs): never executed; CI on Ubuntu runs them.
+- A full server-suite pass after the last test-infrastructure change (see above).
+- A VPS: install, update from v0.7.0, rollback to v0.7.0 on a migrated database, restore.
+- Publishing: no tag, no release; the built assets in this session were made with `--allow-dirty` from uncommitted files and must not be published.

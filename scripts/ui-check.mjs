@@ -119,7 +119,7 @@ try {
   try { await send("Browser.close"); } catch { /* closing */ }
   // wait for Chrome to exit, then remove its temporary profile (it used to be left behind on every run: BUG_FIX_REPORT A26)
   await new Promise(ok => { if (proc.exitCode !== null) return ok(); proc.once("exit", ok); setTimeout(() => { try { proc.kill(); } catch { /* done */ } ok(); }, 3000).unref(); });
-  for (let i = 0; i < 20 && fs.existsSync(dir); i++) { // Chrome's helpers can hold files for a few seconds after it exits (A26 follow-up)
+  for (let i = 0; i < 60 && fs.existsSync(dir); i++) { // Chrome's helpers can hold files for a few seconds after it exits (A26 follow-up)
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 2, retryDelay: 100 }); } catch { /* still releasing files */ }
     if (fs.existsSync(dir)) await sleep(500);
   }

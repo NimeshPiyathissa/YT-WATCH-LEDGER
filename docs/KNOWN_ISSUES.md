@@ -1,6 +1,6 @@
 # Known issues and incomplete work
 
-Last reviewed for extension/server version 0.7.0.
+Last reviewed for extension/server version **0.8.0-rc.1** (2026-11-09). Sections 1-6 date from earlier versions and still apply; sections 7-10 are new in 0.8.0.
 
 ## 1. Remote `resume_tracking` can override the user's pause (known conflict, kept by decision)
 
@@ -18,9 +18,9 @@ In 0.6.0 the Admin console was replaced by the read-only **Device information** 
 
 ## 3. Not yet verified by hand
 
-The automated tests (95 + 37 extension tests, 134 server tests) cover the API, the real-time channels, the real extension sync code running against the real server, and the build. They do **not** cover:
+The automated tests (8 extension test files; about 400 server tests including headless-Chrome runs of every dashboard page and of the built extension; the installer suite) cover the API, the real-time channels, the real extension sync code running against the real server, the dashboard in a real browser, and the build. They do **not** cover:
 
-- how the **Devices page, Configuration panel, popup, Settings page, Device information page and Your data card** look and behave in Chrome (no browser run on the development machine, which was out of memory);
+- the **popup, Settings page, Device information page and Your data card** of the extension used by a person in a normal (not headless) Chrome window;
 - loading the built ZIP with *Load unpacked*;
 - the permission prompt shown while pairing from the popup (Chrome may close the popup; the draft-restore workaround is untested);
 - the HTTPS / reverse-proxy path, including WebSocket and event-stream pass-through.
@@ -61,3 +61,24 @@ Live viewing is a consent the person at the device gives in the extension popup.
 ## 6. The popup can scroll
 
 The v0.8 popup shows more (status, queue, live viewing). Chrome limits a popup to 600 px, so on a small window it scrolls inside the popup. Not yet tuned for a more compact layout.
+
+## 7. Updating from v0.7.0: run update.sh with `bash`, and the first folder is named `0.8.0`
+
+- **v0.7.0 was packed without executable bits** (BUG_FIX_REPORT A30). On a v0.7.0 server, `sudo ./scripts/update.sh` (and `backup.sh`, `restore.sh`, `health-check.sh`) answers "command not found"; `sudo bash scripts/update.sh ...` works. From v0.8.0-rc.1 on, the release tarball keeps the executable bits, and the Updates page's commands always use `bash`.
+- **v0.7.0's update.sh names every 0.8.0 pre-release "0.8.0"** (it reads only the numeric `"version"`), so after updating from v0.7.0 the release candidate lives in `/opt/watch-ledger/releases/0.8.0`. It is the right code; only the folder name is wrong. The next update, made by rc.1's own `update.sh`, renames it to `0.8.0-rc.1` first, so the final 0.8.0 gets its own folder (BUG_FIX_REPORT A29). The Updates page marks such a folder ("holds 0.8.0-rc.1").
+- v0.7.0's `update.sh --check` asks GitHub for the latest *full* release; v0.7.0 itself and every release candidate are published as pre-releases, so it finds none. Update by naming the version: `sudo bash scripts/update.sh --version v0.8.0-rc.1`.
+
+## 8. What the release candidate has not been through yet
+
+- **Linux-only checks.** The installer suite's real update runs (switching releases, the automatic rollback, the v0.7.0 → rc → final folder repair, "never report success unless the new version runs") need symbolic links and run on Linux (CI on Ubuntu 24.04). On the Windows development machine they are reported as skipped.
+- **No VPS run yet.** Fresh install, update from v0.7.0, rollback to v0.7.0 on a migrated database, and the backup restore have been tested in a sandbox only.
+- **The release check** has been tested against a stand-in for GitHub, not the live API.
+- **A20** (a resume recorded about 7 s late on real YouTube) is not reproduced and not fixed; the A19 fix is verified by tests and a stand-in page, not again on real YouTube (YouTube refused the automated browser).
+
+## 9. `update.sh --check` only knows full releases
+
+It asks GitHub for the latest release, which by GitHub's design excludes pre-releases. To move between release candidates, name the version (`--version v0.8.0-rc.2`). The dashboard's Updates page can offer newer pre-releases when a pre-release server has that switched on (see [UPDATES.md](UPDATES.md)).
+
+## 10. The update history is a record, not evidence
+
+`/var/lib/watch-ledger/update-history.jsonl` is written by `update.sh` as root, in a folder the service account can also write to. The dashboard re-checks every line, but a compromised service could alter it. The audit log and the backups do not depend on it.

@@ -161,6 +161,15 @@ env_port() { local p; p="$(env_get PORT)"; printf '%s' "${p:-$WL_PORT_DEFAULT}";
 # The release name is manifest.json's "version_name" when it has one (0.8.0-beta.1; Chrome itself only allows numbers in "version"), else "version".
 manifest_version_of() { local f="$1" v; [ -f "$f" ] || return 0; v="$(sed -n 's/.*"version_name": *"\([^"]*\)".*/\1/p' "$f" | head -n1)"; [ -n "$v" ] || v="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$f" | head -n1)"; printf '%s' "$v"; }
 installed_version() { manifest_version_of "${WL_PREFIX}/current/manifest.json"; }
+# release_manifest_ok <dir> <version>: the release in <dir> is exactly <version>. Its manifest.json names it in "version_name" (or in
+# "version" when there is no version_name), and its numeric "version" is that version's number (0.8.0 for 0.8.0-rc.1). Chrome only
+# allows numbers in "version", so every 0.8.0 pre-release and the final 0.8.0 share "version": "0.8.0"; only version_name tells them apart.
+release_manifest_ok() {
+  local f="$1/manifest.json" num name want="${2#v}"
+  [ -f "$f" ] && [ -n "$want" ] || return 1
+  num="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$f" | head -n1)"; name="$(sed -n 's/.*"version_name": *"\([^"]*\)".*/\1/p' "$f" | head -n1)"
+  [ -n "$num" ] && [ "${name:-$num}" = "$want" ] && [ "$num" = "$(_ver_core "$want")" ]
+}
 source_version() { manifest_version_of "$1/manifest.json"; }
 latest_extension_zip() { local f; f="$(ls -1t "${WL_VAR}/extension"/yt-watch-tracker-v*.zip 2>/dev/null | head -n1 || true)"; printf '%s' "$f"; }
 sha256_of() { if have sha256sum; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
@@ -190,7 +199,17 @@ deploy_release_dir() {
   ver="$(source_version "$src")"; [ -n "$ver" ] || die "Cannot read the version from ${src}/manifest.json"
   valid_semver "$ver" || die "Unexpected version string: ${ver}"
   rel="${WL_PREFIX}/releases/${ver}"; REL_DIR="$rel"
-  if [ -f "$rel/.install-complete" ] && [ -d "$rel/server/node_modules" ]; then ok "Release ${ver} already deployed"; return 0; fi
+  release_manifest_ok "$src" "$ver" || die "The release's manifest.json is inconsistent (version and version_name must name the same release). Nothing was changed."
+  if [ -f "$rel/.install-complete" ] && [ -d "$rel/server/node_modules" ]; then
+    # Reused only when it really holds this version (BUG_FIX_REPORT A29: v0.7.0's update.sh put a 0.8.0 pre-release into releases/0.8.0,
+    # and the final 0.8.0 would then have "found" the pre-release already deployed and kept running it).
+    if release_manifest_ok "$rel" "$ver" && [ "$(head -n1 "$rel/.install-complete" 2>/dev/null)" = "$ver" ]; then ok "Release ${ver} already deployed"; return 0; fi
+    if [ -e "${WL_PREFIX}/current" ] && [ "$(readlink -f "$rel")" = "$(readlink -f "${WL_PREFIX}/current")" ]; then
+      die "${rel} is the running release but holds $(source_version "$rel"), not ${ver}. Nothing was changed."
+    fi
+    warn "${rel} holds $(source_version "$rel"), not ${ver}: it is set aside and ${ver} is installed fresh."
+    run mv -T "$rel" "${rel}.mismatch-$(date -u +%Y%m%dT%H%M%SZ)"
+  fi
   info "Copying release ${ver}"
   run rm -rf "${rel}.partial"; run mkdir -p "${rel}.partial"
   if [ "$WL_DRY_RUN" = "1" ]; then info "(would copy the source tree, excluding .git, node_modules, dist and any data)"; else
@@ -206,6 +225,49 @@ deploy_release_dir() {
     rm -rf "$rel"; mv "${rel}.partial" "$rel"
   fi
   done_ok "Release ${ver} deployed with its dependencies"
+}
+# normalize_current_release: when the running release's folder is named after a different version than it holds, rename it after the
+# version it really holds and point "current" at the new name, before anything else changes (BUG_FIX_REPORT A29). v0.7.0's update.sh
+# named every 0.8.0 pre-release "0.8.0" (it only read the numeric "version"); without this, the real 0.8.0 could not get its own folder.
+# Renaming the folder of a running service is safe on Linux (the running process keeps its files); "current" is re-pointed at once.
+normalize_current_release() {
+  local link="${WL_PREFIX}/current" cur name real dest rels
+  [ -L "$link" ] || return 0
+  cur="$(readlink -f "$link")"; name="$(basename "$cur")"; rels="$(readlink -f "${WL_PREFIX}/releases" 2>/dev/null || true)"
+  [ -n "$rels" ] && [ "$(dirname "$cur")" = "$rels" ] || return 0
+  real="$(manifest_version_of "$cur/manifest.json")"
+  [ -n "$real" ] && valid_semver "$real" && [ "$real" != "$name" ] || return 0
+  release_manifest_ok "$cur" "$real" || die "The running release ${name} has an inconsistent manifest.json; fix it by hand before updating. Nothing was changed."
+  dest="${rels}/${real}"
+  if [ -e "$dest" ]; then
+    { release_manifest_ok "$dest" "$real" && [ -f "$dest/.install-complete" ] && [ -d "$dest/server/node_modules" ]; } || die "The running release folder ${name} holds ${real}, and ${dest} already exists with something else. Resolve it by hand before updating. Nothing was changed."
+    warn "The running release folder ${name} holds ${real}; pointing the server at ${dest}, which holds the same release."
+    [ "$WL_DRY_RUN" = "1" ] && return 0
+    switch_current "$dest"; return 0
+  fi
+  warn "The running release folder ${name} holds ${real} (named by an older update.sh); renaming it to ${real}."
+  [ "$WL_DRY_RUN" = "1" ] && return 0
+  mv -T "$cur" "$dest"
+  switch_current "$dest"
+  printf '%s\n' "$real" > "$dest/.install-complete"
+  ok "The running release is now ${dest}"
+}
+# verify_running <release dir> <version>: true only when "current" points at that release, its manifest and server/package.json both say
+# that version and, on a real server, the running service's working folder is inside it. Never report an update as done otherwise.
+verify_running() {
+  local rel want="${2#v}" cur pv pid cwd
+  rel="$(readlink -f "$1" 2>/dev/null || true)"; cur="$(readlink -f "${WL_PREFIX}/current" 2>/dev/null || true)"
+  [ -n "$rel" ] && [ "$cur" = "$rel" ] || { fail "${WL_PREFIX}/current does not point at ${1}."; return 1; }
+  release_manifest_ok "$cur" "$want" || { fail "The running release's manifest.json does not say ${want}."; return 1; }
+  pv="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$cur/server/package.json" 2>/dev/null | head -n1)"
+  [ "$pv" = "$want" ] || { fail "The running release's server/package.json says '${pv}', not ${want}."; return 1; }
+  if [ -z "$WL_ROOT" ] && have systemctl; then
+    pid="$(systemctl show -p MainPID --value "$WL_SERVICE" 2>/dev/null || true)"
+    [ -n "$pid" ] && [ "$pid" != "0" ] || { fail "The service has no running process."; return 1; }
+    cwd="$(readlink -f "/proc/${pid}/cwd" 2>/dev/null || true)"
+    case "$cwd" in "$cur"|"$cur"/*) ;; *) fail "The running service works in '${cwd}', not in ${cur}."; return 1;; esac
+  fi
+  return 0
 }
 # switch_current <release dir>: atomically points "current" at a release
 switch_current() { run ln -sfn "$1" "${WL_PREFIX}/current.new"; run mv -T "${WL_PREFIX}/current.new" "${WL_PREFIX}/current"; }

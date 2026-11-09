@@ -254,6 +254,104 @@ fi
 rmdir "$HIST"; mv "$HIST.saved" "$HIST"
 [ "$(env_get MASTER_KEY)" = "$MK" ] && [ "$(env_get COOKIE_SECRET)" = "$CS" ] && pass "after the real update runs: MASTER_KEY and COOKIE_SECRET are unchanged" || flunk "keys changed by a real update"
 
+echo "# --- A29: pre-release and final releases get distinct, correctly identified folders"
+# rel_manifest <dir> <numeric version> <version_name or ""> <server/package.json version> <migration exit code>
+rel_manifest() {
+  mkdir -p "$1/server/src"
+  if [ -n "$3" ]; then printf '{ "version": "%s", "version_name": "%s" }\n' "$2" "$3" > "$1/manifest.json"; else printf '{ "version": "%s" }\n' "$2" > "$1/manifest.json"; fi
+  printf '{ "name": "watch-ledger-server", "version": "%s" }\n' "$4" > "$1/server/package.json"; printf 'process.exit(%s);\n' "$5" > "$1/server/src/migrate.js"
+}
+# fake_installed <releases/NAME> <marker> <numeric> <version_name> <package.json version>: a finished release folder (as an older update.sh left it)
+fake_installed() { rel_manifest "$1" "$3" "$4" "$5" 0; mkdir -p "$1/server/node_modules"; printf '%s\n' "$2" > "$1/.install-complete"; }
+T29="$TMPBASE/a29"; mkdir -p "$T29"
+MF="$T29/mf"; mkdir -p "$MF"
+mfok() { printf '%s\n' "$1" > "$MF/manifest.json"; release_manifest_ok "$MF" "$2"; }
+mfok '{ "version": "0.8.0", "version_name": "0.8.0-rc.1" }' 0.8.0-rc.1 && ! mfok '{ "version": "0.8.0", "version_name": "0.8.0-rc.1" }' 0.8.0 && mfok '{ "version": "0.8.0" }' v0.8.0 \
+  && ! mfok '{ "version": "0.8.0", "version_name": "0.9.0-rc.1" }' 0.9.0-rc.1 && ! mfok '{ "version": "0.7.0" }' 0.7.0-rc.1 \
+  && pass "release_manifest_ok: version_name tells 0.8.0-rc.1 from 0.8.0, and version must be its number" || flunk "release_manifest_ok"
+rel_manifest "$T29/src-bad" 0.8.0 9.20.0-rc.1 9.20.0-rc.1 0
+out="$(bash "$REPO/scripts/update.sh" --from-dir "$T29/src-bad" --dry-run --yes 2>&1)"; code=$?
+[ "$code" != "0" ] && contains "$out" "inconsistent" && ! contains "$out" "Would take a verified backup" && pass "a release whose version and version_name disagree is refused before anything is done" || flunk "inconsistent manifest refused" "code=$code $(printf '%s' "$out" | tail -3)"
+fake_installed "$WL_PREFIX/releases/9.21.0" 9.21.0 9.21.0 9.21.0-rc.1 9.21.0-rc.1
+rel_manifest "$T29/src-9.21.0" 9.21.0 "" 9.21.0 0
+out="$(bash "$REPO/scripts/update.sh" --from-dir "$T29/src-9.21.0" --dry-run --yes 2>&1)"; code=$?
+[ "$code" = "0" ] && contains "$out" "holds 9.21.0-rc.1, not 9.21.0: it is set aside" && ! contains "$out" "already deployed" && pass "a folder named 9.21.0 that holds 9.21.0-rc.1 is never reused for 9.21.0 (dry run)" || flunk "mismatched folder reused" "code=$code $(printf '%s' "$out" | grep -E 'holds|deployed|Copying' | head -3)"
+[ -d "$WL_PREFIX/releases/9.21.0" ] && pass "...and a dry run moves nothing" || flunk "dry run moved the folder"
+rm -rf "$WL_PREFIX/releases/9.21.0"
+
+if [ "$SYMLINKS" = "1" ]; then
+  # real deploys in the sandbox: a stand-in npm (creates node_modules) and a no-op chown (the sandbox has no watchledger user)
+  mkdir -p "$WL_PREFIX/node/bin" "$T29/shim"
+  printf '#!/bin/sh\nmkdir -p node_modules\n' > "$WL_PREFIX/node/bin/npm"; printf '#!/bin/sh\nexit 0\n' > "$T29/shim/chown"; chmod +x "$WL_PREFIX/node/bin/npm" "$T29/shim/chown"
+  up() { PATH="$T29/shim:$PATH" bash "$REPO/scripts/update.sh" "$@" 2>&1; }
+  running_is() { same_dir "$WL_PREFIX/current" "$WL_PREFIX/releases/$1" && [ "$(installed_version)" = "$2" ]; }
+
+  # 1. v0.7.0's update.sh put 9.30.0-rc.1 into releases/9.30.0; the final 9.30.0 must get its own folder and really run
+  fake_installed "$WL_PREFIX/releases/9.30.0" 9.30.0 9.30.0 9.30.0-rc.1 9.30.0-rc.1; ln -sfn "$WL_PREFIX/releases/9.30.0" "$WL_PREFIX/current"
+  rel_manifest "$T29/src-9.30.0" 9.30.0 "" 9.30.0 0
+  out="$(up --from-dir "$T29/src-9.30.0" --yes)"; code=$?
+  [ "$code" = "0" ] && contains "$out" "renaming it to 9.30.0-rc.1" && contains "$out" "running 9.30.0" && running_is 9.30.0 9.30.0 \
+    && release_manifest_ok "$WL_PREFIX/releases/9.30.0-rc.1" 9.30.0-rc.1 && release_manifest_ok "$WL_PREFIX/releases/9.30.0" 9.30.0 \
+    && pass "rc -> final: the mis-named rc folder is renamed, the final gets releases/9.30.0, and 9.30.0 is what runs" || flunk "rc -> final" "code=$code $(printf '%s' "$out" | tail -6)"
+  contains "$(last_hist)" '"from":"9.30.0-rc.1"' && contains "$(last_hist)" '"to":"9.30.0"' && contains "$(last_hist)" '"result":"success"' && contains "$(last_hist)" '"previous":"9.30.0-rc.1"' \
+    && pass "rc -> final: history says 9.30.0-rc.1 -> 9.30.0, previous release 9.30.0-rc.1" || flunk "rc -> final history" "$(last_hist)"
+
+  # 2. the same, but the final's migration fails: back to the (renamed) rc, which is still the release that runs
+  fake_installed "$WL_PREFIX/releases/9.31.0" 9.31.0 9.31.0 9.31.0-rc.1 9.31.0-rc.1; ln -sfn "$WL_PREFIX/releases/9.31.0" "$WL_PREFIX/current"
+  rel_manifest "$T29/src-9.31.0" 9.31.0 "" 9.31.0 1
+  out="$(up --from-dir "$T29/src-9.31.0" --yes)"; code=$?
+  [ "$code" = "1" ] && contains "$out" "The previous release is running again" && ! contains "$out" "Update complete" && running_is 9.31.0-rc.1 9.31.0-rc.1 \
+    && contains "$(last_hist)" '"result":"rolled_back"' && contains "$(last_hist)" '"previous":"9.31.0-rc.1"' \
+    && pass "rc -> final with a failed migration: rolled back to 9.31.0-rc.1 (renamed), recorded as rolled back" || flunk "rc -> final rollback" "code=$code $(last_hist) $(printf '%s' "$out" | tail -4)"
+
+  # 3. never report success unless the intended version is the one running: a final whose server says another version
+  fake_installed "$WL_PREFIX/releases/9.32.0-rc.1" 9.32.0-rc.1 9.32.0 9.32.0-rc.1 9.32.0-rc.1; ln -sfn "$WL_PREFIX/releases/9.32.0-rc.1" "$WL_PREFIX/current"
+  rel_manifest "$T29/src-9.32.0" 9.32.0 "" 9.32.0-rc.1 0
+  out="$(up --from-dir "$T29/src-9.32.0" --yes)"; code=$?
+  [ "$code" = "1" ] && contains "$out" "is not the release it is running" && ! contains "$out" "Update complete" && running_is 9.32.0-rc.1 9.32.0-rc.1 \
+    && contains "$(last_hist)" '"result":"rolled_back"' && contains "$(last_hist)" '"stage":"verifying"' \
+    && pass "an update is never reported as done when the intended version is not the one running: it rolls back" || flunk "verify_running guard" "code=$code $(last_hist) $(printf '%s' "$out" | tail -4)"
+
+  # 4. rc.1 -> rc.2 (both named correctly): two distinct folders, rc.2 runs, rc.1 kept for rollback
+  fake_installed "$WL_PREFIX/releases/9.33.0-rc.1" 9.33.0-rc.1 9.33.0 9.33.0-rc.1 9.33.0-rc.1; ln -sfn "$WL_PREFIX/releases/9.33.0-rc.1" "$WL_PREFIX/current"
+  rel_manifest "$T29/src-9.33.0-rc.2" 9.33.0 9.33.0-rc.2 9.33.0-rc.2 0
+  out="$(up --from-dir "$T29/src-9.33.0-rc.2" --yes)"; code=$?
+  [ "$code" = "0" ] && running_is 9.33.0-rc.2 9.33.0-rc.2 && [ -d "$WL_PREFIX/releases/9.33.0-rc.1" ] && contains "$(last_hist)" '"previous":"9.33.0-rc.1"' \
+    && pass "rc.1 -> rc.2: its own folder, rc.2 runs, rc.1 kept as the previous release" || flunk "rc.1 -> rc.2" "code=$code $(printf '%s' "$out" | tail -4)"
+
+  # 5. the guard inside deploy_release_dir: the running release is never overwritten or reused for another version
+  fake_installed "$WL_PREFIX/releases/9.34.0" 9.34.0 9.34.0 9.34.0-rc.1 9.34.0-rc.1; ln -sfn "$WL_PREFIX/releases/9.34.0" "$WL_PREFIX/current"
+  rel_manifest "$T29/src-9.34.0" 9.34.0 "" 9.34.0 0
+  out="$( set +e; deploy_release_dir "$T29/src-9.34.0" 2>&1; echo "rc=$?" )"
+  contains "$out" "is the running release but holds 9.34.0-rc.1" && release_manifest_ok "$WL_PREFIX/releases/9.34.0" 9.34.0-rc.1 && pass "deploy_release_dir refuses to reuse or replace the running release for another version" || flunk "running-release guard" "$out"
+  ln -sfn "$REPO" "$WL_PREFIX/current"
+else
+  for t in "rc -> final: mis-named rc renamed, final in its own folder and running" "rc -> final: history" "rc -> final with a failed migration rolls back to the renamed rc" \
+    "an update is never reported as done when the intended version is not running" "rc.1 -> rc.2: distinct folders" "deploy_release_dir never reuses the running release for another version"; do skip "$t (real run): needs symbolic links (run on Linux)"; done
+fi
+
+echo "# --- release packaging: the built assets are what update.sh (this one and v0.7.0's) expects"
+RB="$TMPBASE/relbuild"
+out="$( cd "$REPO" && "$WL_NODE" tools/build-release.mjs --out "$RB" --allow-dirty 2>&1 )"; code=$?
+RV="$(source_version "$REPO")"; TGZ="watch-ledger-v${RV}.tar.gz"
+[ "$code" = "0" ] && [ -f "$RB/$TGZ" ] && [ -f "$RB/yt-watch-tracker-v${RV}.zip" ] && [ -f "$RB/SHA256SUMS" ] && pass "tools/build-release.mjs builds the tarball, the extension ZIP and SHA256SUMS" || flunk "release build" "code=$code $out"
+( cd "$RB" && sha256sum -c SHA256SUMS >/dev/null 2>&1 ) && pass "sha256sum -c SHA256SUMS accepts both assets" || flunk "sha256sum -c"
+# exactly the lookup update.sh's fetch_release does on a downloaded SHA256SUMS
+WANT="$(awk -v f="$TGZ" '$2 == f || $2 == "*" f {print $1; exit}' "$RB/SHA256SUMS")"
+grep -q "awk -v f=\"\$asset\" '\$2 == f || \$2 == \"\\*\" f {print \$1; exit}'" "$REPO/scripts/update.sh" && [ "$WANT" = "$(sha256_of "$RB/$TGZ")" ] \
+  && pass "update.sh's own SHA256SUMS lookup finds the tarball's checksum" || flunk "SHA256SUMS lookup" "want=$WANT"
+[ "$(tar --force-local -tzf "$RB/$TGZ" | cut -d/ -f1 | sort -u)" = "watch-ledger-v${RV}" ] && pass "the tarball has exactly one top-level folder, watch-ledger-v${RV}/" || flunk "top-level folder"
+out="$(bash "$REPO/scripts/update.sh" --from-tarball "$RB/$TGZ" --sha256 "$WANT" --force --dry-run --yes 2>&1)"; code=$?
+[ "$code" = "0" ] && contains "$out" "Checksum verified" && contains "$out" "Target version:    ${RV}" && contains "$out" "Would take a verified backup" \
+  && pass "this update.sh accepts the built tarball (checksum, unpacking, manifest) and plans the update" || flunk "update.sh accepts the release" "code=$code $(printf '%s' "$out" | tail -4)"
+out="$(bash "$REPO/scripts/update.sh" --from-tarball "$RB/$TGZ" --sha256 "$(printf '%s' "$WANT" | tr '0-9a-f' '1-9a-f0')" --dry-run --yes 2>&1)"; code=$?
+[ "$code" != "0" ] && contains "$out" "Checksum mismatch" && pass "a tarball with a different checksum is refused" || flunk "checksum mismatch refused"
+# a v0.7.0 server runs v0.7.0's update.sh (exact copies in scripts/tests/fixtures/v0.7.0): it must accept the new tarball too
+V7="$TMPBASE/v070/scripts"; mkdir -p "$V7/lib"; cp "$REPO/scripts/tests/fixtures/v0.7.0/update.sh" "$V7/update.sh"; cp "$REPO/scripts/tests/fixtures/v0.7.0/lib/common.sh" "$V7/lib/common.sh"
+out="$(bash "$V7/update.sh" --from-tarball "$RB/$TGZ" --sha256 "$WANT" --force --dry-run --yes 2>&1)"; code=$?
+[ "$code" = "0" ] && contains "$out" "Checksum verified" && contains "$out" "Target version:    $(_ver_core "$RV")" \
+  && pass "v0.7.0's update.sh accepts the built tarball (and, as A29 describes, reads it as $(_ver_core "$RV"))" || flunk "v0.7.0 update.sh accepts the release" "code=$code $(printf '%s' "$out" | tail -4)"
+
 kill "$SERVER_PID" 2>/dev/null; SERVER_PID=""
 
 echo "1..$N"

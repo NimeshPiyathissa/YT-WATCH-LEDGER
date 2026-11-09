@@ -65,14 +65,14 @@ test("Update Manager: status, release check, copyable commands, backups and hist
 
     // ---- the check, off ----
     check("the check is off by default: Check now is disabled and Settings is offered", await ev("document.getElementById('umCheck').disabled && /Check is off/.test(document.querySelector('.um-check').textContent) && !!document.querySelector('.um-check a[href=\"#/settings\"]')"));
-    check("the instructions use a placeholder version while nothing was found", await ev("[...document.querySelectorAll('.um-cmd code')].some(c => c.textContent === 'sudo ./scripts/update.sh --version vX.Y.Z')"));
+    check("the instructions use a placeholder version while nothing was found", await ev("[...document.querySelectorAll('.um-cmd code')].some(c => c.textContent === 'sudo bash scripts/update.sh --version vX.Y.Z')"));
     check("the rollback commands name the previous installed release", await ev("[...document.querySelectorAll('.um-cmd code')].some(c => c.textContent === 'sudo ln -sfn /opt/watch-ledger/releases/0.7.0 /opt/watch-ledger/current')"));
 
     // ---- copy ----
     await ev("document.querySelector('[data-copy=\"umU3\"]').click(); 1");
     check("Copy says so", await until("/Copied/.test(document.getElementById('toast').textContent)"));
     const clip = await ev("navigator.clipboard.readText()");
-    check("...and the clipboard holds exactly the command", clip === "sudo ./scripts/update.sh --version vX.Y.Z", clip);
+    check("...and the clipboard holds exactly the command", clip === "sudo bash scripts/update.sh --version vX.Y.Z", clip);
 
     // ---- the check, on: a failure, then a release ----
     const put = await ev(`fetch("/api/settings/studio",{method:"PUT",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({changes:{update_check_enabled:true}})}).then(r=>r.status)`);
@@ -86,7 +86,7 @@ test("Update Manager: status, release check, copyable commands, backups and hist
     check("a new release is announced", await until("/0\\.8\\.0 is available/.test(document.getElementById('umResultBox').textContent)"));
     check("...its name is shown as text, not run", await ev("!window.__pwned && !document.querySelector('#umResultBox img') && /<img src=x/.test(document.getElementById('umResultBox').textContent)"));
     check("...with a safe link to the release notes", await ev("(() => { const a = document.querySelector('#umResultBox a'); return !!a && a.href.startsWith('https://github.com/NimeshPiyathissa/YT-WATCH-LEDGER/releases/') && a.rel.includes('noopener') && a.rel.includes('noreferrer') && a.target === '_blank'; })()"));
-    check("...and the commands are filled in for 0.8.0", await ev("[...document.querySelectorAll('.um-cmd code')].some(c => c.textContent === 'sudo ./scripts/update.sh --version v0.8.0')"));
+    check("...and the commands are filled in for 0.8.0", await ev("[...document.querySelectorAll('.um-cmd code')].some(c => c.textContent === 'sudo bash scripts/update.sh --version v0.8.0')"));
 
     // ---- empty history, phone ----
     fs.renameSync(historyFile, historyFile + ".away");
