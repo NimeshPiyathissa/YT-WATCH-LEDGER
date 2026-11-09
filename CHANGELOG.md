@@ -16,7 +16,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 #### Fixed
 - An invalid `BACKUP_KEEP` (for example `abc`) deleted every backup including the new one, and a backup interval that was not a number silently switched scheduled backups off (A22). Bad environment values are now ignored, reported and replaced by the default.
 - The Data page changed the retention window and deleted data immediately, without showing how much; the control now lives in Settings Studio with a count and a confirmation (A23). The old API route is unchanged.
-- Settings Studio overwrote the backup keep count and interval a caller gave the app with the built-in defaults; an explicit owner or environment value still wins, otherwise the caller's value stands (A24).
+- Settings Studio overwrote the backup keep count and interval a caller gave the app with the built-in defaults; an explicit owner or environment value still wins, otherwise the caller's value stands (A24). Re-verified on 2026-11-09: server suite 354 pass / 0 fail / 2 skipped, extension tests 272 checks / 0 failed, `ui-check.mjs` 104 / 0.
 - The Security page's sidebar entry and empty state used an icon that does not exist (an unknown name draws a warning symbol); a test now checks every icon name the dashboard and the extension use (A21).
 - The end of a viewing could be lost with nothing left to recover from: the saved recorder state is now kept until the service worker has stored the end event, duplicate end events are dropped, and recovery never closes a viewing twice (A19; measured in real Chrome).
 - A seek that was slow to finish was counted as playing time in the event-based totals (A18; found by driving real Chrome on real YouTube). Mirrored in all three copies of `playback.js`.
