@@ -148,6 +148,7 @@
     if (h === "#/analytics") return pageGuard(() => window.WLAnalytics.render(app))();
     if (h === "#/reports" || h.indexOf("#/reports?") === 0) return pageGuard(() => window.WLReports.render(app, h))();
     if (h === "#/health") return pageGuard(() => window.WLHealth.render(app))();
+    if (h === "#/updates") return pageGuard(() => window.WLUpdates.render(app))();
     if (h === "#/security") return pageGuard(() => window.WLSecurity.render(app))();
     if (h === "#/notifications") return pageGuard(() => window.WLNotifications.render(app))();
     if (h === "#/settings") return pageGuard(() => window.WLSettings.render(app))();

@@ -175,6 +175,8 @@ out="$(bash "$REPO/scripts/update.sh" --from-tarball "$TMPBASE/rel.tar.gz" --sha
 GOOD="$(sha256_of "$TMPBASE/rel.tar.gz")"
 out="$(bash "$REPO/scripts/update.sh" --from-tarball "$TMPBASE/rel.tar.gz" --sha256 "$GOOD" --dry-run --yes 2>&1)"; [ $? -eq 0 ] && contains "$out" "Checksum verified" && pass "a tarball with the right checksum is accepted" || flunk "good checksum" "$out"
 [ "$(env_get MASTER_KEY)" = "$MK" ] && pass "after all update runs: MASTER_KEY is still the original" || flunk "MASTER_KEY changed by update"
+HIST="$WL_VAR/update-history.jsonl"
+[ ! -e "$HIST" ] && pass "update history: dry runs and 'already running' record nothing" || flunk "dry runs wrote history" "$(cat "$HIST" 2>/dev/null)"
 
 echo "# --- health check (with a real server)"
 bash "$REPO/scripts/health-check.sh" --quiet >/dev/null 2>&1; code=$?
@@ -192,6 +194,66 @@ PATH="$DFP:$PATH" bash "$REPO/scripts/health-check.sh" --quiet >"$TMPBASE/hc.txt
 [ "$code" = "0" ] || [ "$code" = "1" ] && ! grep -q "NOT running\|does not answer" "$TMPBASE/hc.txt" && pass "health check: a running server passes the application check (exit $code)" || flunk "health check on a running server" "$(cat "$TMPBASE/hc.txt")"
 out="$(cd "$REPO" && WL_ADMIN_EMAIL=owner@example.com WL_ADMIN_PASSWORD='Str0ng&Secret#2026' BASE_URL=x "$WL_NODE" scripts/smoke-test.mjs --url "http://127.0.0.1:8799" --anonymous 2>&1)"
 contains "$out" "checks passed" && pass "the smoke test (anonymous) passes against the installer-configured server" || flunk "smoke test against the generated config" "$out"
+echo "# --- update history: the logging function itself (sourced from update.sh, under its own strict mode with an ERR trap armed)"
+HV="$TMPBASE/hv"; mkdir -p "$HV"
+out="$( . "$REPO/scripts/update.sh"; trap - EXIT; trap 'echo ERR-TRAP-FIRED' ERR
+  WL_VAR="$HV"; HIST_ON=1; HIST_FROM="0.8.0-beta.1"; STAGE="migrating and switching"; BACKUP_FILE="/var/lib/x/backups/pre-update/tracker-20261109T020000Z.db"; PREVIOUS_REL="/opt/watch-ledger/releases/0.8.0-beta.1"
+  for r in success rolled_back failed cancelled; do HIST_RESULT="$r"; HIST_TO='9.9.9"},{"evil":"\x'; record_history 1; done
+  HIST_RESULT=""; record_history 0; HIST_RESULT=""; record_history 3
+  HIST_ON=0; HIST_RESULT="success"; record_history 0
+  mkdir -p "$HV/blocked/update-history.jsonl"; WL_VAR="$HV/blocked"; HIST_ON=1; record_history 1; echo "after-unwritable rc=$?" )"
+H="$HV/update-history.jsonl"
+[ "$(wc -l < "$H" | tr -d ' ')" = "5" ] && pass "history: one line per recorded result; exit 0 with no result and HIST_ON=0 write nothing" || flunk "history line count" "$(cat "$H")"
+( cd "$REPO/server" && "$WL_NODE" -e "const l=require('fs').readFileSync(process.argv[1],'utf8').trim().split('\n').map(x=>JSON.parse(x));const ok=l.map(x=>x.result).join()==='success,rolled_back,failed,cancelled,failed'&&l.every(x=>x.to==='9.9.9evilx'&&!('evil' in x)&&x.backup==='tracker-20261109T020000Z.db'&&x.previous==='0.8.0-beta.1'&&x.from==='0.8.0-beta.1')&&l[4].exitCode===3;process.exit(ok?0:1)" "$H" ) && pass "history: valid JSON; quotes and other hostile characters are stripped; file names only, never paths" || flunk "history JSON content" "$(cat "$H")"
+contains "$out" "after-unwritable rc=0" && ! contains "$out" "ERR-TRAP-FIRED" && pass "history: a file that cannot be written returns 0 and never fires the ERR trap (so it cannot trigger a rollback)" || flunk "history isolation (unit)" "$out"
+
+echo "# --- update history: real (not dry-run) update attempts in the sandbox, with the server above still running"
+# mkrel <version> <migration exit code>: a release that is already deployed (so no npm ci) whose migration exits with that code,
+# and a source folder naming it, for --from-dir
+mkrel() {
+  local d="$WL_PREFIX/releases/$1"; mkdir -p "$d/server/src" "$d/server/node_modules" "$TMPBASE/src-$1/server"
+  printf '{ "version": "%s" }\n' "$1" > "$d/manifest.json"; printf '%s\n' "$1" > "$d/.install-complete"
+  printf 'process.exit(%s);\n' "$2" > "$d/server/src/migrate.js"; cp "$d/manifest.json" "$TMPBASE/src-$1/manifest.json"
+}
+skip() { N=$((N + 1)); printf 'ok %d - # SKIP %s\n' "$N" "$1"; }
+last_hist() { tail -n 1 "$HIST" 2>/dev/null; }
+same_dir() { [ "$(cd "$1" && pwd -P)" = "$(cd "$2" && pwd -P)" ]; }
+# switching releases needs real symbolic links; Git Bash on Windows without Developer Mode copies instead, so those runs are skipped there
+mkdir -p "$TMPBASE/lnk/a"; ln -sfn "$TMPBASE/lnk/a" "$TMPBASE/lnk/b" 2>/dev/null; if [ -L "$TMPBASE/lnk/b" ]; then SYMLINKS=1; else SYMLINKS=0; fi
+mkrel 9.9.7 1; mkrel 9.9.8 0; mkrel 9.9.9 0
+EXPECT=2
+if [ "$SYMLINKS" = "1" ]; then
+  EXPECT=4
+  out="$(bash "$REPO/scripts/update.sh" --from-dir "$TMPBASE/src-9.9.7" --yes 2>&1)"; code=$?
+  [ "$code" = "1" ] && contains "$out" "The previous release is running again" && same_dir "$WL_PREFIX/current" "$REPO" && pass "a failed migration rolls the code back (unchanged behaviour)" || flunk "rollback on a failed migration" "code=$code $(printf '%s' "$out" | tail -5)"
+  L="$(last_hist)"
+  contains "$L" '"result":"rolled_back"' && contains "$L" "\"from\":\"${CURV}\"" && contains "$L" '"to":"9.9.7"' && contains "$L" '"stage":"migrating and switching"' && contains "$L" '"exitCode":1' && pass "history: the rolled-back attempt is recorded with its versions and stage" || flunk "history: rolled back" "$L"
+  B="$(printf '%s' "$L" | sed -n 's/.*"backup":"\([^"]*\)".*/\1/p')"
+  [ -n "$B" ] && [ -f "$WL_VAR/backups/pre-update/$B" ] && pass "history: it names the pre-update backup (file name only), which exists" || flunk "history: backup name" "$L"
+  out="$(bash "$REPO/scripts/update.sh" --from-dir "$TMPBASE/src-9.9.8" --yes 2>&1)"; code=$?
+  [ "$code" = "0" ] && contains "$out" "Update complete" && contains "$(last_hist)" '"result":"success"' && contains "$(last_hist)" '"to":"9.9.8"' && pass "history: a successful update is recorded as success" || flunk "history: success" "code=$code $(last_hist) $(printf '%s' "$out" | tail -4)"
+  contains "$(last_hist)" "\"previous\":\"$(basename "$REPO")\"" && ! contains "$(last_hist)" "/" && pass "history: the previous release is named, and no path appears" || flunk "history: previous / paths" "$(last_hist)"
+  ln -sfn "$REPO" "$WL_PREFIX/current"   # back to this checkout for the next attempts
+else
+  for t in "a failed migration rolls the code back (real run)" "history: the rolled-back attempt (real run)" "history: the pre-update backup is named (real run)" "history: a successful update (real run)" "history: previous release named, no path (real run)"; do skip "$t: needs symbolic links (run on Linux)"; done
+fi
+out="$(WL_NONINTERACTIVE=1 bash "$REPO/scripts/update.sh" --from-dir "$TMPBASE/src-9.9.9" 2>&1)"; code=$?
+[ "$code" = "1" ] && contains "$out" "Cancelled" && contains "$(last_hist)" '"result":"cancelled"' && contains "$(last_hist)" '"to":"9.9.9"' && [ "$(installed_version)" = "$CURV" ] && pass "history: a declined confirmation is recorded as cancelled, nothing changed" || flunk "history: cancelled" "code=$code $(last_hist)"
+out="$(bash "$REPO/scripts/update.sh" --from-dir "$TMPBASE/oldsrc" --yes 2>&1)"; code=$?
+[ "$code" != "0" ] && contains "$out" "older than the installed" && contains "$(last_hist)" '"result":"failed"' && contains "$(last_hist)" '"stage":"verifying the target release"' && contains "$(last_hist)" '"backup":""' && pass "history: a refused downgrade is recorded as stopped before any change" || flunk "history: downgrade" "$(last_hist)"
+( cd "$REPO/server" && "$WL_NODE" -e "const l=require('fs').readFileSync(process.argv[1],'utf8').trim().split('\n');for(const x of l)JSON.parse(x);process.exit(l.length===Number(process.argv[2])?0:1)" "$HIST" "$EXPECT" ) && pass "history: ${EXPECT} real attempts, ${EXPECT} lines, every one valid JSON" || flunk "history: JSON lines" "$(cat "$HIST")"
+# a history file that cannot be written must not change anything
+mv "$HIST" "$HIST.saved"; mkdir "$HIST"
+if [ "$SYMLINKS" = "1" ]; then
+  out="$(bash "$REPO/scripts/update.sh" --from-dir "$TMPBASE/src-9.9.7" --yes 2>&1)"; code=$?
+  [ "$code" = "1" ] && contains "$out" "The previous release is running again" && same_dir "$WL_PREFIX/current" "$REPO" && pass "an unwritable history file changes neither the rollback nor the exit code" || flunk "history failure isolation" "code=$code $(printf '%s' "$out" | tail -4)"
+else
+  out="$(bash "$REPO/scripts/update.sh" --from-dir "$TMPBASE/oldsrc" --yes 2>&1)"; code=$?
+  [ "$code" = "1" ] && contains "$out" "older than the installed" && [ "$(installed_version)" = "$CURV" ] && pass "an unwritable history file changes neither the outcome nor the exit code" || flunk "history failure isolation" "code=$code $(printf '%s' "$out" | tail -4)"
+fi
+rmdir "$HIST"; mv "$HIST.saved" "$HIST"
+[ "$(env_get MASTER_KEY)" = "$MK" ] && [ "$(env_get COOKIE_SECRET)" = "$CS" ] && pass "after the real update runs: MASTER_KEY and COOKIE_SECRET are unchanged" || flunk "keys changed by a real update"
+
 kill "$SERVER_PID" 2>/dev/null; SERVER_PID=""
 
 echo "1..$N"

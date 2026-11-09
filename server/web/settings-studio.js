@@ -9,7 +9,7 @@
   let seq = 0;
   const SOURCE = { owner: ["on", "Your setting"], environment: ["info", "From the server's settings file"], default: ["", "Built-in default"] };
   const PAGE_NAMES = { overview: "Overview", analytics: "Analytics", reports: "Reports", history: "History", videos: "Videos", devices: "Devices", notifications: "Notifications", health: "Health" };
-  const NAV = [["retention", "Data retention", "database"], ["backups", "Backups", "hard-drive"], ["security", "Pairing and access", "shield-check"], ["notifications", "Notifications", "bell"], ["preferences", "Your preferences", "settings"], ["restart", "Needs a restart", "server"]];
+  const NAV = [["retention", "Data retention", "database"], ["backups", "Backups", "hard-drive"], ["security", "Pairing and access", "shield-check"], ["notifications", "Notifications", "bell"], ["updates", "Updates", "refresh-cw"], ["preferences", "Your preferences", "settings"], ["restart", "Needs a restart", "server"]];
   const pill = (cls, text) => `<span class="pill ${cls}"><span class="dot"></span><span>${esc(text)}</span></span>`;
 
   function control(i) {
@@ -37,7 +37,7 @@
         <div class="studio-main stack">
           ${group(byKey.retention)}${group(byKey.backups)}${group(byKey.security)}
           <section class="card studio-card" id="sec_notifications"><div class="card-head"><h3>Notifications</h3></div><p class="muted">What the dashboard tells you about, and when. These are the same settings as on the Notifications page.</p><div id="stNotif"></div></section>
-          ${group(byKey.preferences)}
+          ${group(byKey.updates)}${group(byKey.preferences)}
           <section class="card studio-card" id="sec_restart"><div class="card-head"><h3>Needs a restart</h3></div>
             <p class="muted">These are read when the server starts, so they cannot be changed here. To change one, edit the server's settings file (on the installer's layout: <span class="mono">/etc/watch-ledger/watch-ledger.env</span>) and run <span class="mono">sudo systemctl restart watch-ledger</span>. Keys and passwords are never shown.</p>
             <div class="set-rows">${s.restartRequired.map(r => `<div class="set-row"><div class="set-text"><b>${esc(r.label)}</b><p class="muted">${esc(r.help)}</p><span class="caption">variable <span class="mono">${esc(r.env)}</span></span></div><div class="set-control"><span class="mono set-ro">${esc(String(r.value))}</span> ${pill("", "Restart to change")}</div></div>`).join("")}</div></section>

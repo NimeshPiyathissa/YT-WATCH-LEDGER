@@ -53,7 +53,27 @@ on_error() {
   esac
 }
 trap on_error ERR
-cleanup() { [ -n "$TMP_DIR" ] && [ -d "$TMP_DIR" ] && rm -rf "$TMP_DIR"; return 0; }
+# ---- update history (additive): one JSON line per real update attempt, appended to ${WL_VAR}/update-history.jsonl and shown by the
+# dashboard's Update Manager. Checks (--check), dry runs and "already running" are not recorded. Best effort and fully isolated: it runs
+# in a subshell with no ERR trap and no errexit, all output discarded, so a failure to write it can never trigger a rollback or change
+# the outcome or exit code of the update. Every value is reduced to [A-Za-z0-9._ -] first, so the line is always valid JSON.
+HIST_ON=0; HIST_RESULT=""; HIST_FROM=""; HIST_TO=""; HIST_SOURCE=""
+_hist_clean() { printf '%s' "${1:-}" | tr -cd 'A-Za-z0-9._ -' | cut -c1-100; }
+record_history() {
+  local rc="${1:-0}"
+  [ "$HIST_ON" = "1" ] || return 0
+  ( trap - ERR EXIT; set +eu
+    r="$HIST_RESULT"
+    if [ -z "$r" ]; then [ "$rc" = "0" ] && exit 0; r="failed"; fi
+    f="${WL_VAR}/update-history.jsonl"
+    [ -d "$WL_VAR" ] || exit 0
+    line="$(printf '{"v":1,"at":"%s","from":"%s","to":"%s","result":"%s","stage":"%s","source":"%s","backup":"%s","previous":"%s","exitCode":%d}'       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(_hist_clean "$HIST_FROM")" "$(_hist_clean "$HIST_TO")" "$(_hist_clean "$r")" "$(_hist_clean "$STAGE")"       "$(_hist_clean "$HIST_SOURCE")" "$(_hist_clean "$(basename "${BACKUP_FILE:-}" 2>/dev/null)")" "$(_hist_clean "$(basename "${PREVIOUS_REL:-}" 2>/dev/null)")" "$((rc + 0))")"
+    umask 022; printf '%s
+' "$line" >> "$f" && chmod 0644 "$f"
+  ) >/dev/null 2>&1 || true
+  return 0
+}
+cleanup() { record_history "$?"; [ -n "$TMP_DIR" ] && [ -d "$TMP_DIR" ] && rm -rf "$TMP_DIR"; return 0; }
 trap cleanup EXIT
 
 latest_tag() { curl -fsS -m 15 -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/${WL_REPO}/releases/latest" 2>/dev/null | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1 || true; }
@@ -80,11 +100,12 @@ extract_tarball() {
 rollback() {
   local why="$1"
   fail "${why}"
+  HIST_RESULT="failed"
   if [ -n "$PREVIOUS_REL" ] && [ -d "$PREVIOUS_REL" ]; then
     warn "Switching back to the previous release: $(basename "$PREVIOUS_REL")"
     switch_current "$PREVIOUS_REL"
     [ -z "$WL_ROOT" ] && { systemctl restart "$WL_SERVICE" || true; }
-    if health_wait 40; then ok "The previous release is running again."; else fail "The previous release did not start either. Check: journalctl -u watch-ledger -n 80 --no-pager"; fi
+    if health_wait 40; then ok "The previous release is running again."; HIST_RESULT="rolled_back"; else fail "The previous release did not start either. Check: journalctl -u watch-ledger -n 80 --no-pager"; fi
   fi
   say ""
   say "  Your data is safe: a backup was taken before anything changed."
@@ -115,6 +136,8 @@ main() {
 
   # ---- 1. find and verify the target
   STAGE="verifying the target release"; step 1 "VERIFY THE TARGET RELEASE"
+  [ "$WL_DRY_RUN" = "1" ] || HIST_ON=1; HIST_FROM="$installed"; HIST_TO="$TARGET_TAG"
+  if [ -n "$FROM_DIR" ]; then HIST_SOURCE="directory"; elif [ -n "$FROM_TARBALL" ]; then HIST_SOURCE="tarball"; elif [ -n "$TARGET_TAG" ]; then HIST_SOURCE="github"; fi
   local SRC=""
   if [ -n "$FROM_DIR" ]; then SRC="$(cd "$FROM_DIR" && pwd)"; [ -f "$SRC/manifest.json" ] && [ -d "$SRC/server" ] || die "${FROM_DIR} is not a Watch Ledger checkout."
   elif [ -n "$FROM_TARBALL" ]; then
@@ -127,9 +150,10 @@ main() {
   local target; target="$(source_version "$SRC")"
   valid_semver "$target" || die "The target has no valid version."
   info "Target version:    ${target}"
+  HIST_TO="$target"
   if [ "$target" = "$installed" ] && [ "$FORCE" = "0" ]; then ok "Already running ${installed}. Use --force to reinstall it."; exit 0; fi
   if ! version_ge "$target" "$installed" && [ "$ALLOW_DOWNGRADE" = "0" ]; then die "${target} is older than the installed ${installed}. A downgrade can be incompatible with the migrated database; use --allow-downgrade only if you know it is safe."; fi
-  confirm "Update Watch Ledger ${installed} -> ${target}? A backup is taken first." || die "Cancelled. Nothing was changed."
+  confirm "Update Watch Ledger ${installed} -> ${target}? A backup is taken first." || { HIST_RESULT="cancelled"; die "Cancelled. Nothing was changed."; }
   PREVIOUS_REL="$(readlink -f "${WL_PREFIX}/current" 2>/dev/null || true)"
 
   # ---- 2. backup (a separate folder that nothing ever prunes)
@@ -179,6 +203,7 @@ main() {
     local domain; domain="$(env_get BASE_URL | sed 's#^https://##')"
     if [ -n "$domain" ] && ( cd "${WL_PREFIX}/current" && service_user_run "$WL_NODE_BIN" tools/build-extension.mjs --out "${WL_VAR}/extension" --server "https://${domain}" >/dev/null 2>&1 ); then ok "New extension ZIP: $(latest_extension_zip)"; else warn "The extension ZIP was not rebuilt; run: node tools/build-extension.mjs --server https://YOUR-DOMAIN"; fi
   fi
+  HIST_RESULT="success"
   say ""; say "  ${C_GREEN}Update complete: ${installed} -> ${target}${C_RESET}"
   say "  Previous release kept for rollback: ${PREVIOUS_REL:-n/a}"
   [ -n "$BACKUP_FILE" ] && say "  Pre-update backup (kept): ${BACKUP_FILE}"

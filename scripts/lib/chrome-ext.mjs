@@ -18,6 +18,15 @@ export function findChrome() {
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// Removes a temporary folder, retrying while files are still held by an exiting process; true when it is gone.
+export async function removeDir(d, { tries = 20, delay = 500 } = {}) {
+  for (let i = 0; i < tries; i++) {
+    try { fs.rmSync(d, { recursive: true, force: true, maxRetries: 2, retryDelay: 100 }); } catch { /* still in use */ }
+    if (!fs.existsSync(d)) return true;
+    await new Promise(r => setTimeout(r, delay));
+  }
+  return !fs.existsSync(d);
+}
 export async function launch({ extensionDir, extraHostPermissions = ["http://127.0.0.1/*"], headless = true, chromeArgs = [] }) {
   const chrome = findChrome();
   if (!chrome) throw new Error("no Chrome found");
@@ -79,7 +88,9 @@ export async function launch({ extensionDir, extraHostPermissions = ["http://127
     try { await Promise.race([send("Browser.close"), sleep(3000)]); } catch { /* closing */ }
     await Promise.race([exited, sleep(5000)]);
     if (proc.exitCode === null) { try { proc.kill(); } catch { /* done */ } await Promise.race([exited, sleep(2000)]); }
-    for (const d of [profile, ext]) { try { fs.rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 400 }); } catch { /* Chrome still releasing files; it is a temp folder */ } }
+    // Chrome's helper processes can hold (and even recreate) files for a few seconds after the browser itself has exited, so a single
+    // removal could leave the folder half-deleted (A26 follow-up): keep trying until it is really gone, for up to about 10 s.
+    for (const d of [profile, ext]) await removeDir(d);
   }
   return { extensionId, send, targets, attach, evalIn, waitFor, serviceWorker, openTab, closeTab, screenshot, close, onEvent: fn => listeners.push(fn), sleep };
 }

@@ -67,6 +67,7 @@ Passwords are accepted only through the environment (or stdin), never as an opti
 | `/etc/watch-ledger/watch-ledger.env` | configuration and secrets (mode 0640, root:watchledger) |
 | `/var/lib/watch-ledger/data/tracker.db` | the database |
 | `/var/lib/watch-ledger/backups/` | the server's rolling daily backups (`manual/` and `pre-update/` are never pruned) |
+| `/var/lib/watch-ledger/update-history.jsonl` | one line per update attempt made with `update.sh` (no secrets); shown on the dashboard's Updates page |
 | `/var/lib/watch-ledger/extension/` | the built extension ZIP and unpacked folder |
 
 Service: `systemctl status watch-ledger`, logs: `journalctl -u watch-ledger -f`.

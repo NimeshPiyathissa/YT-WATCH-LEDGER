@@ -22,6 +22,10 @@ export const SETTINGS = {
     help: "Applies to codes you create from now on." },
   pairing_max_fails: { group: "security", type: "int", min: 1, max: 50, def: 5, unit: "wrong codes", env: "PAIRING_MAX_FAILS", label: "Lock out an address after",
     help: "Wrong pairing codes from one address within 15 minutes, then that address is locked out for 15 minutes. Held in memory: a restart clears it." },
+  update_check_enabled: { group: "updates", type: "bool", def: false, label: "Check GitHub for new releases",
+    help: "Off by default. When on, the Updates page can ask GitHub's public releases list whether a newer version exists, only when you press Check now. No account, token or data of yours is sent; GitHub sees this server's address. Nothing is ever installed from the dashboard." },
+  update_include_prereleases: { group: "updates", type: "bool", def: false, label: "Also offer newer pre-releases",
+    help: "Only applies while this server runs a pre-release (beta or release candidate): newer pre-releases of the same release line are offered as well as stable releases. A stable server is only ever offered stable releases. Never a downgrade." },
   default_page: { group: "preferences", type: "enum", values: PAGES, def: "overview", label: "Open the dashboard on",
     help: "The page shown when you open the dashboard without a link to a specific page." },
   compact_tables: { group: "preferences", type: "bool", def: false, label: "Compact tables",
@@ -44,6 +48,7 @@ export const GROUPS = [
   { key: "retention", title: "Data retention", intro: "How long the server keeps what your devices send." },
   { key: "backups", title: "Backups", intro: "Automatic backups of the database. Keep copies off this server too." },
   { key: "security", title: "Pairing and access", intro: "How new devices are admitted." },
+  { key: "updates", title: "Updates", intro: "Whether the Updates page may look for new releases. Updates are always installed on the server with scripts/update.sh." },
   { key: "preferences", title: "Your preferences", intro: "How the dashboard looks and where it opens." }
 ];
 

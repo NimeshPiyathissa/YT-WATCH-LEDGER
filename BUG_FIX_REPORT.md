@@ -165,6 +165,24 @@ Nothing in this file claims real-browser or real-VPS testing that was not done; 
 - **Fix:** `server/test/tmpdir.js` (`tmpDir(prefix)`) removes its folders when the test process exits; the Chrome helpers wait for Chrome to exit and then remove its profile.
 - **Verified:** running the build, backup and both headless-Chrome UI test files left the number of `yt-*` / `wl-*` folders unchanged (351 before, 351 after), and `ui-check.mjs` no longer leaves its profile behind.
 
+### A26 (follow-up). Chrome profiles were still left behind after the A26 fix
+- **Found while checking disk space during the Update Manager work:** 15 headless-Chrome profile folders (`wl-prof-*`, `wl-ui-*`) from that day's runs were still in the temp folder, half-deleted (`Default`, `FileTypePolicies`, `FirstPartySetsPreloaded` remained). No test Chrome was still running.
+- **Cause:** Chrome's helper processes hold, and even recreate, files for a few seconds after the browser process itself exits; the single removal (2 s of retries) gave up with the folder half-deleted.
+- **Fix:** `removeDir()` in `scripts/lib/chrome-ext.mjs` and the same loop in `scripts/ui-check.mjs` keep removing until the folder is really gone (up to about 10 s).
+- **Verified:** running `ui.test.js`, `reports-ui.test.js` and `updates-ui.test.js` left the number of `wl-*` / `yt-*` folders unchanged (366 before, 366 after).
+
+### A27. The dashboard check tripped the server's own rate limit as the dashboard grew
+- **Where:** `scripts/ui-check.mjs` (run by `server/test/ui.test.js`).
+- **Found by:** a full server-suite run: "expired access cookie: the session still works afterwards" failed with `429 rate_limited`. The server allows 300 requests a minute from one address; with Reports and Updates the check opens 11 pages at 3 sizes, each reading several APIs, and a fast run went over. A slower run passed, so it was intermittent.
+- **Fix (the checker, not the server):** before each screen size and before the expired-cookie burst, `ui-check.mjs` reads the limit's own `x-ratelimit-remaining` / `x-ratelimit-reset` headers and waits for headroom. The server's limit is unchanged.
+- **Verified:** `ui.test.js` passed twice in a row on its own and in the final full suite; `ui-check.mjs` against a throwaway server: 122 passed, 0 failed.
+
+### A28. The installer test's time limit was too short under the full suite, and a timed-out run left its sandbox server running
+- **Where:** `server/test/installer.test.js` (runs `scripts/tests/test-installer.sh`).
+- **Found by:** a full server-suite run: the installer test was killed at its 280 s limit (`status null`). On its own it takes about 90 s; under the full suite's load (headless Chrome tests alongside) it took 219 s, 311 s and 354 s in later runs, with steady progress (monitored), not a hang. The killed run's sandbox server stayed listening on port 8799, so the next standalone run failed "a stopped server is CRITICAL" (a server was running); it was stopped by hand.
+- **Fix:** the limit is now 480 s (test 500 s), with the measured times in a comment.
+- **Not fixed:** a run that is killed from outside still cannot run its own clean-up (the sandbox server and its temporary folder stay). That only happens when a run is killed; see "Remaining limitations" in G.
+
 ### A21. The Security page asked for an icon that does not exist
 - **Where:** `server/web/index.html`, `server/web/security.js` (my own work from the Security Center milestone, never released).
 - **Confirmed:** the new `server/test/icons.test.js` listed `shield` as missing. An unknown icon name does not draw nothing: it draws the `circle-alert` fallback, so the sidebar entry showed a warning symbol.
@@ -180,6 +198,8 @@ Nothing in this file claims real-browser or real-VPS testing that was not done; 
 | B4 | **`update.sh` could not tell a pre-release from its release.** It compared only `manifest.json`'s numeric `version` (the same `0.8.0` for beta.1, rc.1 and the final release) and `sort -V` ranks `0.8.0-beta.1` above `0.8.0`, so an update from a beta to the final release would have been refused as "already installed". | Found by the installer suite the moment the version was bumped to `0.8.0-beta.1` (3 failures) | `version_ge` now follows semver pre-release rules, the release name is read from `version_name`; 8 new assertions in `scripts/tests/test-installer.sh` |
 | B5 | **Signing out another browser made that browser's retry look like theft**, so the reuse detection would have signed out the browser you were still using. | Found by the new "sign out others" test the first time it ran | Tokens ended on purpose are marked `revoked=2` and refused quietly; `security-center.test.js` (B5, plus "however often it retries") |
 | B6 | Reports Studio's print page right-aligned only plain numbers, so durations sat left under right-aligned headings. | Reading the PDF produced by headless Chrome | the print page marks right-aligned columns explicitly |
+| B7 | The Update Manager's version parser trimmed surrounding whitespace, so `"1.2.3\n"` counted as a version. | Its own test ("anything else refused") | no trimming: only a clean version string is a version |
+| B8 | The monospace font's ligatures drew `--` as a dash in the copyable commands (`--check` looked like `—check`); the copied text was right, but a command read off the screen would be wrong. | Desktop screenshot of the Updates page | ligatures are switched off for commands, versions and file names |
 
 ## C. Known and unchanged
 
@@ -234,7 +254,7 @@ Two tests named specific migrations in a way that a new migration broke (the 007
 - The A19 fix against real YouTube after the change (YouTube blocked the automated browser); it is verified by unit tests, the device-harness tests and a real-Chrome run on real YouTube's page before YouTube refused service, plus the stand-in page.
 - A20 is not reproduced and not fixed.
 
-## E. Verification results for Reports Studio (2026-11-09, Windows 11 development machine)
+## F. Verification results for Reports Studio (2026-11-09, Windows 11 development machine)
 
 Run one suite at a time (the disk had 13 GB free before and after; no heavy suites in parallel).
 
@@ -254,3 +274,45 @@ Run one suite at a time (the disk had 13 GB free before and after; no heavy suit
 - `shellcheck -S warning` over all shell scripts reports SC2034 ("appears unused") for variables in sourced libraries (`scripts/lib/common.sh`, `scripts/install.sh`). No shell script was changed in this work; these are not new.
 - The print page was checked as rendered by headless Chrome (`Page.printToPDF`), not printed on paper or saved through every browser's own dialog.
 - Not run on a VPS: the dashboard was served by a local throwaway server.
+
+## G. Update Manager (2026-11-09, Windows 11 development machine)
+
+### Audit of the existing update and backup logic (before any change)
+- `scripts/update.sh`: checksum-verified download (or a checksum-verified tarball, or a local checkout) → backup into `backups/pre-update/` (never pruned) → install beside the running release → migrate → atomic switch → health check, with an automatic **code** rollback on failure. `MASTER_KEY`, `COOKIE_SECRET`, the configuration, databases and backups are never touched. Sound; unchanged apart from the history lines below.
+- **Gap:** no record of updates was kept anywhere; the dashboard could not show any history. Fixed by an additive history file (approved Decision 1).
+- **Finding, not changed:** `update.sh --check` asks GitHub for `/releases/latest`, which by GitHub's design excludes pre-releases, so a beta server is told "up to date" while a newer beta exists. This matches Decision 2 (stable releases by default); changing it was outside the approved scope. Documented in `docs/UPDATES.md`; the Updates page offers newer pre-releases when that is switched on.
+- Rollback: automatic for the code inside `update.sh`; by hand otherwise (documented). No `rollback.sh` was added (Decision 3).
+
+### What changed in `scripts/update.sh`
+28 lines added, 3 lines changed (each keeps its behaviour and only adds a history marker): `cleanup` (the EXIT trap) first appends one JSON line per real update attempt to `${WL_VAR}/update-history.jsonl`; `rollback` marks `rolled_back` or `failed`; a declined confirmation marks `cancelled`. Checks, dry runs and "already running" are not recorded. The writer runs in a subshell with no ERR trap and no errexit and discards all output, so it can never trigger a rollback or change an exit code; every value is reduced to `[A-Za-z0-9._ -]`, so the line is always valid JSON and holds file names, never paths. `shellcheck` reports nothing new.
+
+### Security findings
+| Area | Finding |
+|---|---|
+| Running commands from the web | None possible. The three Update Manager routes are `GET /api/updates`, `POST /api/updates/check`, `POST /api/updates/backups/:name/verify`. A test reads the route, library and page source and fails on `child_process`, `exec`/`spawn`/`fork`, `eval`, any file-writing call, or any other route. |
+| Credentials | The release check sends no token, cookie or credential and reads none (a test sets `GITHUB_TOKEN` and checks it never appears in the request); `credentials: "omit"`, `redirect: "error"`, fixed URL. No secret or server path in any response (tested). |
+| Outbound requests | Off by default (Settings → Updates); only on **Check now**; 10 s, 1 MB, JSON only; a successful answer reused for 10 minutes; rate-limited; audited (`update_check`). GitHub sees the server's IP address when it is on (documented). |
+| Untrusted release data | Tags must parse as strict SemVer; links must point at this repository's releases page (otherwise replaced); names are stripped of control characters and escaped when shown; release notes are not taken. A hostile name (`<img onerror=...>`) is shown as text (UI test). |
+| Shell commands shown to the owner | Built only from values validated as versions or backup file names; hostile values become placeholders (tested). Every script and option they name exists (tested against `scripts/*.sh`). |
+| History file | Lives in a folder the service account can write to, so it is a record for the owner, not tamper-proof evidence; every field is re-validated when read, bad lines are skipped and counted, at most 256 KB / 200 entries are read. |
+| Authorization | Owner-only (cookie); device tokens refused; cross-site writes refused, including flipping the check on (tested; the route-auth sweep also covers the new routes). |
+| Downgrades | Never offered: only strictly newer versions; a stable server is offered stable releases only; pre-releases only for a pre-release server, of its own release line, when switched on (tested). |
+
+### Verification (run one suite at a time; 11 GB free before, during and after the final run)
+| Check | Result |
+|---|---|
+| Server suite (`npm test`) | 396 tests: 394 passed, 0 failed, 2 skipped (the two real-Chrome-on-YouTube tests, which need `WL_EXT_E2E=1`). New: `updates.test.js` 21 tests (version parsing and ordering, offers and channels, history parsing, release normalisation, the check without credentials and with every failure, instructions vs the real scripts, hostile values, installed releases, routes, check off by default, caching, audit, backup verification, authorization, settings, source security scan) and `updates-ui.test.js` (1 test, 28 headless-Chrome steps) |
+| Installer suite (`scripts/tests/test-installer.sh`) | 125 "ok": 120 passed and 5 skipped, 0 failed (plus the existing "env file mode (not Linux)" skip). New: 14 checks of the history logging (the function itself under strict mode with an ERR trap armed: every result, hostile values, an unwritable file; real cancelled and refused-downgrade runs; an unwritable history file changes neither outcome nor exit code; keys unchanged). The 5 skipped are real rollback and success runs that switch releases: they need symbolic links, which Git Bash on this Windows machine cannot create (no Developer Mode); they run on Linux (CI runs this suite on Ubuntu 24.04) |
+| Extension unit tests | 8 files, 272 checks, 0 failed (no extension code changed) |
+| `scripts/ui-check.mjs` (throwaway server and database) | 122 passed, 0 failed (113 before + 9 for Updates) |
+| Syntax of every `.js` / `.mjs` / `.cjs`; `bash -n` of every shell script | 167 files, 0 errors; clean |
+| Documentation links | 200 checked, 0 problems |
+| `npm audit --omit=dev --audit-level=high` | passes (the same 3 moderate advisories as in D) |
+| Temporary folders | a full server-suite run left none behind (383 before, 383 after) |
+
+### Remaining limitations
+- The real update, rollback and history runs that switch releases (5 installer checks) were not run on this machine; they run on Linux. Not run on a VPS.
+- The release check was tested against a stand-in for GitHub, never against the live GitHub API (no network calls from tests, and no release published yet).
+- `update.sh --check` still only knows stable releases (see the audit above).
+- A test run killed from outside cannot clean up after itself (A28).
+- `v0.7.0` servers have no history: entries start with the first update made by the v0.8.0 `update.sh`.

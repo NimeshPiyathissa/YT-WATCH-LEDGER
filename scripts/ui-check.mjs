@@ -52,10 +52,17 @@ async function goto(url) {
 }
 
 const PAGES = [["overview", "#/overview", "Overview"], ["analytics", "#/analytics", "Analytics"], ["reports", "#/reports", "Reports"], ["history", "#/history", "History"], ["videos", "#/videos", "Videos"],
-  ["devices", "#/devices", "Devices"], ["health", "#/health", "Health Center"], ["data", "#/data", null], ["security", "#/security", "Security Center"], ["notifications", "#/notifications", "Notifications"], ["settings", "#/settings", "Settings"], ["audit", "#/audit", null]];
+  ["devices", "#/devices", "Devices"], ["health", "#/health", "Health Center"], ["updates", "#/updates", "Updates"], ["data", "#/data", null], ["security", "#/security", "Security Center"], ["notifications", "#/notifications", "Notifications"], ["settings", "#/settings", "Settings"], ["audit", "#/audit", null]];
 const SIZES = [["phone", 390, 800, true], ["tablet", 820, 1100, false], ["desktop", 1440, 900, false]];
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log((ok ? "  ok   " : "  FAIL ") + name + (detail ? "  (" + detail + ")" : "")); };
+// The server allows 300 requests a minute from one address, and this check makes many quickly (11 pages x 3 sizes, each page reading
+// several APIs). Before each burst it waits for headroom instead of tripping the limit: a 429 would be reported as a broken page or a
+// lost session, which is not what is being checked. Reads the limit's own headers; never changes the server.
+async function headroom(min = 80) {
+  const r = await ev(`fetch("/api/health", { credentials: "same-origin" }).then(r => [Number(r.headers.get("x-ratelimit-remaining")), Number(r.headers.get("x-ratelimit-reset"))]).catch(() => [NaN, NaN])`).catch(() => [NaN, NaN]);
+  if (Number.isFinite(r[0]) && r[0] < min) await sleep((Math.min(60, Math.max(1, r[1] || 60)) + 1) * 1000);
+}
 const waitFor = async (expr, ms = 8000) => { const end = Date.now() + ms; while (Date.now() < end) { if (await ev(expr).catch(() => false)) return true; await sleep(150); } return false; };
 
 try {
@@ -73,6 +80,7 @@ try {
 
   for (const [sn, w, h, mobile] of SIZES) {
     await send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 1, mobile });
+    await headroom();
     await goto(URL_ + "/#/audit");              // one real page load per screen size (starting on a page that is not in the list, so every hash change below is a real navigation); pages are then opened the way the owner does (the sidebar's hash links)
     for (const [name, hash, title] of PAGES) {
       await ev(`document.getElementById('app').innerHTML = ''; location.hash = ${JSON.stringify(hash)}; 1`);
@@ -97,6 +105,7 @@ try {
   // and the owner must still be signed in. (Refreshing twice with one cookie makes the server treat it as stolen and end every session.)
   await goto(URL_ + "/#/health");
   await sleep(1500);
+  await headroom();
   await send("Network.deleteCookies", { name: "at", url: URL_ + "/" });
   const burst = await ev(`(async () => { const paths = ['/api/devices', '/api/system', '/api/settings', '/api/audit', '/api/security/overview', '/api/system/backups'];
     const r = await Promise.allSettled(paths.map(p => window.WL.api('GET', p))); return { ok: r.filter(x => x.status === 'fulfilled').length, of: paths.length, hash: location.hash, errs: r.filter(x => x.status === 'rejected').map(x => String(x.reason && x.reason.message)) }; })()`);
@@ -110,7 +119,10 @@ try {
   try { await send("Browser.close"); } catch { /* closing */ }
   // wait for Chrome to exit, then remove its temporary profile (it used to be left behind on every run: BUG_FIX_REPORT A26)
   await new Promise(ok => { if (proc.exitCode !== null) return ok(); proc.once("exit", ok); setTimeout(() => { try { proc.kill(); } catch { /* done */ } ok(); }, 3000).unref(); });
-  try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 }); } catch { /* still releasing files */ }
+  for (let i = 0; i < 20 && fs.existsSync(dir); i++) { // Chrome's helpers can hold files for a few seconds after it exits (A26 follow-up)
+    try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 2, retryDelay: 100 }); } catch { /* still releasing files */ }
+    if (fs.existsSync(dir)) await sleep(500);
+  }
 }
 const failed = results.filter(r => !r.ok);
 console.log(`\n${results.length - failed.length} passed, ${failed.length} failed`);

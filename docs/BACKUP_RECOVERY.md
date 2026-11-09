@@ -14,7 +14,7 @@ Keep a copy of `MASTER_KEY` in a password manager, **separately from the backups
 
 - **Automatic:** the server writes a verified daily backup to `/var/lib/watch-ledger/backups/` and keeps the newest 30.
 - **On demand:** `sudo ./scripts/backup.sh` writes to `/var/lib/watch-ledger/backups/manual/` (never pruned). `--dest /mnt/usb` also copies it elsewhere with a checksum check.
-- **Before every update:** `update.sh` backs up into `backups/pre-update/` (never pruned).
+- **Before every update:** `update.sh` backs up into `backups/pre-update/` (never pruned). The dashboard's **Updates** page lists them and can verify each one ([UPDATES.md](UPDATES.md)).
 - Safe while the server runs. No script ever deletes a backup.
 - `--with-keys --dest D` additionally writes the two secrets to `D` (mode 0600). Do this only onto storage you trust; it defeats the separation above.
 

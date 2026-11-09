@@ -10,8 +10,9 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const bash = spawnSync("bash", ["--version"], { encoding: "utf8" });
 
-test("installer, update, backup, restore and health-check scripts (sandboxed, real database)", { skip: bash.status !== 0 ? "bash is not available" : false, timeout: 300000 }, () => {
-  const r = spawnSync("bash", ["scripts/tests/test-installer.sh"], { cwd: ROOT, encoding: "utf8", timeout: 280000, env: { ...process.env, WL_NODE: process.execPath } });
+test("installer, update, backup, restore and health-check scripts (sandboxed, real database)", { skip: bash.status !== 0 ? "bash is not available" : false, timeout: 500000 }, () => {
+  // about 90 s on its own; under the full suite's load (headless Chrome tests alongside) it has taken up to about 4 minutes
+  const r = spawnSync("bash", ["scripts/tests/test-installer.sh"], { cwd: ROOT, encoding: "utf8", timeout: 480000, env: { ...process.env, WL_NODE: process.execPath } });
   const failed = (r.stdout.match(/^not ok .*$/gm) || []);
   const summary = (r.stdout.match(/^# (\d+) passed, (\d+) failed/m) || []);
   assert.deepEqual(failed, [], failed.join("\n") + "\n" + r.stdout.split("\n").filter(l => l.startsWith("#   ")).join("\n"));

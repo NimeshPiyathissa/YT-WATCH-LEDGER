@@ -25,6 +25,8 @@ Each setting shows one of three labels:
 | A pairing code stays valid for | 1 to 120 minutes | 15 | `PAIRING_CODE_TTL_MIN` |
 | Lock out an address after N wrong pairing codes | 1 to 50 | 5 | `PAIRING_MAX_FAILS` |
 | Notifications: on/off per kind, thresholds, how long resolved ones are kept | see [NOTIFICATIONS.md](NOTIFICATIONS.md) | | none |
+| Updates: check GitHub for new releases | on / off | off | none |
+| Updates: also offer newer pre-releases (only while this server runs a pre-release) | on / off | off | none |
 | Open the dashboard on | Overview, Analytics, Reports, History, Videos, Devices, Notifications, Health | Overview | none |
 | Compact tables | on / off | off | none |
 

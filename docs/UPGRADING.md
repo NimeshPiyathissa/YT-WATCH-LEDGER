@@ -21,6 +21,8 @@ sudo ./scripts/update.sh --version vX.Y.Z        # backs up first, migrates, swi
 
 Build or download the new ZIP ([EXTENSION_SETUP.md](EXTENSION_SETUP.md)), unzip it **over the folder the extension was loaded from**, then `chrome://extensions` → reload. Do not load it from a different folder: the extension ID would change and the pairing would be lost.
 
+The dashboard's **Updates** page (v0.8.0) shows these steps filled in for your versions, the pre-update backups and the update history: [UPDATES.md](UPDATES.md).
+
 ## Rolling back
 
 1. **Code only (the usual case):** `update.sh` already did this if the health check failed. To do it by hand: `sudo ln -sfn /opt/watch-ledger/releases/<previous> /opt/watch-ledger/current && sudo systemctl restart watch-ledger`. The v0.7.0 code does not reference the new columns or the new table, so it should run on a migrated database (this exact downgrade has **not** been tested; restore the pre-update backup if in doubt).

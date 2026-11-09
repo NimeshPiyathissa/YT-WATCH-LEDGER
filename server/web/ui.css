@@ -221,3 +221,42 @@ body { background-image: var(--glow); background-repeat: no-repeat; background-a
   .rp-barcell { width: auto; } .rp-barcell::before { display: none; }
 }
 @media (forced-colors: active) { .rp-bar .fill { fill: Highlight; } .rp-saved-list li.open { border-color: Highlight; } }
+
+/* Update Manager */
+.um-status { display: grid; gap: var(--s-4); grid-template-columns: minmax(0, 1fr); background: linear-gradient(135deg, var(--accent-soft), var(--surface) 70%); border-color: color-mix(in srgb, var(--accent) 28%, var(--line)); }
+.um-version { font: 600 clamp(30px, 5vw, 44px)/1.05 var(--font-display, inherit); letter-spacing: -.01em; color: var(--accent); margin: var(--s-1) 0 var(--s-2); overflow-wrap: anywhere; }
+.um-status .row { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); align-items: center; }
+.um-facts { display: grid; gap: var(--s-3); grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); margin: 0; }
+.um-facts > div { padding: var(--s-3); border-radius: var(--r-md); background: color-mix(in srgb, var(--surface) 70%, transparent); border: 1px solid var(--line); }
+.um-facts dt { font: 600 11px/1.3 var(--font-body); text-transform: uppercase; letter-spacing: .08em; color: var(--text-3); margin-bottom: 4px; }
+.um-facts dd { margin: 0; }
+.um-status .alert { grid-column: 1 / -1; }
+.um-check .row, .um-howto .row { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-3); }
+.alert.ok { border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); border-left-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.alert .icon { width: 16px; height: 16px; vertical-align: -3px; margin-right: 6px; }
+.um-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-2); max-height: 420px; overflow-y: auto; }
+.um-event { padding: var(--s-3); border-radius: var(--r-md); border: 1px solid var(--line); border-left: 3px solid var(--line-strong); }
+.um-event.success { border-left-color: var(--ok); } .um-event.rolled_back { border-left-color: var(--warn); } .um-event.failed { border-left-color: var(--danger); }
+.um-event-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); }
+.um-event-head time { margin-left: auto; }
+.um-event p { margin: var(--s-1) 0 0; overflow-wrap: anywhere; }
+.um-steps { margin: var(--s-2) 0 var(--s-4); padding-left: 1.4em; display: flex; flex-direction: column; gap: var(--s-3); }
+.um-step p { margin: 0 0 6px; color: var(--text-2); font-size: var(--fs-small); }
+.um-cmd { display: flex; align-items: stretch; gap: var(--s-2); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--sunken); padding: 4px 4px 4px var(--s-3); }
+.um-cmd code { flex: 1; min-width: 0; align-self: center; font: 400 13px/1.5 var(--font-mono); color: var(--text); overflow-wrap: anywhere; white-space: pre-wrap; }
+.um-cmd .btn { flex: none; }
+.um-cmd code, .um-releases .mono, .um-event .mono, .um-backups .mono { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; } /* "--check" must not be drawn as a dash */
+.um-cmd .btn.done { color: var(--ok); }
+.um-howto h4 { margin: var(--s-4) 0 var(--s-1); font-size: var(--fs-body); }
+.um-releases { list-style: none; margin: 0 0 var(--s-2); padding: 0; display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.um-releases li { display: inline-flex; align-items: center; gap: var(--s-2); padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--r-pill); }
+.um-verify { margin-top: 6px; } .um-verify.ok { color: var(--ok); } .um-verify.bad { color: var(--danger); }
+.um-verify .icon { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }
+.um-backups td.mono { overflow-wrap: anywhere; }
+.um-pad { padding: 0 var(--s-4) var(--s-4); }
+.um-offscreen { position: fixed; left: -9999px; top: 0; opacity: 0; }
+@media (min-width: 960px) { .um-status { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); align-items: center; } }
+@media (min-width: 1100px) { .um-howto { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+@media (max-width: 1099px) { .um-howto { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 559px) { .um-cmd { flex-direction: column; padding: var(--s-2); } .um-cmd code { align-self: stretch; } .um-cmd .btn { align-self: flex-end; } .um-event-head time { margin-left: 0; width: 100%; } }
+@media (forced-colors: active) { .um-event, .um-cmd { border: 1px solid CanvasText; } }
