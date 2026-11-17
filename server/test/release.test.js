@@ -17,11 +17,11 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
 const sha = b => crypto.createHash("sha256").update(b).digest("hex");
 const hasTar = spawnSync("tar", ["--version"]).status === 0;
 
-test("the version metadata is consistent and names 0.8.0-rc.1, a pre-release that orders between beta and final", () => {
+test("the version metadata is consistent and names 0.8.0, a final release that outranks its pre-releases", () => {
   const v = checkVersions();
-  assert.deepEqual(v, { version: "0.8.0-rc.1", tag: "v0.8.0-rc.1", prerelease: true, numeric: "0.8.0" });
-  assert.equal(channelOf(v.version), "rc");
-  assert.ok(compareVersions(v.version, "0.8.0-beta.1") > 0 && compareVersions(v.version, "0.8.0") < 0 && compareVersions(v.version, "0.7.0") > 0);
+  assert.deepEqual(v, { version: "0.8.0", tag: "v0.8.0", prerelease: false, numeric: "0.8.0" });
+  assert.equal(channelOf(v.version), "stable");
+  assert.ok(compareVersions(v.version, "0.8.0-rc.1") > 0 && compareVersions(v.version, "0.8.1") < 0 && compareVersions(v.version, "0.7.0") > 0);
   assert.equal(parseVersion(v.tag).text, v.version);
 });
 
@@ -71,14 +71,14 @@ test("the tar writer: ustar with root ownership, the given modes, long paths, an
 
 test("a full release build: three assets, correct checksums, one top-level folder, executable scripts, versions, nothing forbidden; reproducible", () => {
   const out = tmpDir("yt-rel-out-"), r = buildRelease({ out, allowDirty: true });
-  assert.deepEqual(fs.readdirSync(out).sort(), ["SHA256SUMS", "watch-ledger-v0.8.0-rc.1.tar.gz", "yt-watch-tracker-v0.8.0-rc.1.zip"], "only the assets: the extension staging folder is gone");
+  assert.deepEqual(fs.readdirSync(out).sort(), ["SHA256SUMS", "watch-ledger-v0.8.0.tar.gz", "yt-watch-tracker-v0.8.0.zip"], "only the assets: the extension staging folder is gone");
   const sums = fs.readFileSync(path.join(out, "SHA256SUMS"), "utf8").trim().split("\n");
   assert.equal(sums.length, 2);
   for (const l of sums) { const [h, n] = l.split("  "); assert.equal(sha(fs.readFileSync(path.join(out, n))), h, n); }
   const entries = readTarGz(fs.readFileSync(path.join(out, r.tarball)));
-  assert.ok(entries.every(e => e.name.startsWith("watch-ledger-v0.8.0-rc.1/")), "one top-level folder");
+  assert.ok(entries.every(e => e.name.startsWith("watch-ledger-v0.8.0/")), "one top-level folder");
   assert.ok(!entries.some(e => forbiddenPath(e.name.replace(/^[^/]+\//, "").replace(/\/$/, ""))), "nothing forbidden");
-  const mode = n => (entries.find(e => e.name === "watch-ledger-v0.8.0-rc.1/" + n) || {}).mode;
+  const mode = n => (entries.find(e => e.name === "watch-ledger-v0.8.0/" + n) || {}).mode;
   for (const s of ["install.sh", "scripts/update.sh", "scripts/backup.sh", "scripts/restore.sh", "scripts/health-check.sh", "scripts/install.sh"]) assert.equal(mode(s), 0o755, s + " is executable (A30)");
   assert.equal(mode("scripts/lib/common.sh"), 0o644); assert.equal(mode("server/src/server.js"), 0o644);
   for (const must of ["server/migrations/007_device_consents_sync_diagnostics.sql", "server/migrations/008_notifications.sql", "server/migrations/009_saved_reports.sql", "server/web/updates.js", "docs/UPGRADING.md"])

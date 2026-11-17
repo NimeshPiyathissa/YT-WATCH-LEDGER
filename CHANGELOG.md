@@ -2,7 +2,13 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] - v0.8.0 development (branch `develop/v0.8.0`)
+## [0.8.0] - prepared 2026-11-17 (branch `release/v0.8.0`)
+
+### v0.8.0 (final release)
+The same code as v0.8.0-rc.1, which was tested on a real server and on a fresh install (below). Only the version changes: `manifest.json` `version_name`, `server/package.json` and `package-lock.json` now say `0.8.0` (`manifest.json` `version` was already `0.8.0`), and the release-packaging test expects the final version. No migrations beyond `009`; no change to the code, the scripts or the extension.
+- **Updating from v0.7.0:** once v0.8.0 is published as a full release, v0.7.0's `update.sh --check` finds it. Run `sudo bash scripts/update.sh --version v0.8.0`; v0.7.0's script installs it into `releases/0.8.0`, which is now the right name. Details: `docs/UPGRADING.md`.
+- **Updating from v0.8.0-rc.1:** `sudo ./scripts/update.sh --version v0.8.0`. If v0.7.0's script had put rc.1 into a folder named `0.8.0`, rc.1's `update.sh` first renames it to `0.8.0-rc.1` (A29).
+- **Known issues carried over, not fixed** (`docs/KNOWN_ISSUES.md` section 12): A33 (the bundled Node.js is owned by uid 1000 after `install.sh`; workaround `sudo chown -R root:root /opt/watch-ledger/node`), A34 (`--staging-cert` installs fail their own checks), A35 (nginx's default site stays enabled).
 
 ### v0.8.0-rc.1 (release candidate, prepared 2026-11-09; published 2026-11-17 as a GitHub pre-release, tag `v0.8.0-rc.1` = commit `b17d4a7`)
 Version metadata: `manifest.json` `version_name` `0.8.0-rc.1` (`version` stays `0.8.0`), `server/package.json` and `package-lock.json` `0.8.0-rc.1`. Database migrations since v0.7.0: `007` (device consents and sync diagnostics), `008` (notifications), `009` (saved reports), all additive. Upgrading from v0.7.0, the RC limits and rolling back: `docs/UPGRADING.md`.
