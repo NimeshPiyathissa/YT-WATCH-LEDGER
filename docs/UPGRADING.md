@@ -1,6 +1,6 @@
 # Upgrading from v0.7.0 to v0.8.0 (release candidate v0.8.0-rc.1)
 
-> **Status.** v0.8.0-rc.1 is a **release candidate**: published (when it is) as a GitHub *pre-release*, for testing before v0.8.0. Everything below is what the code does and what the automated tests check in a sandbox. Updating a real server and rolling it back have **not** been done on a VPS yet. Take an off-server copy of your backups first.
+> **Status.** v0.8.0-rc.1 is a **release candidate**, published on 2026-11-17 as a GitHub *pre-release* for testing before v0.8.0. The update from v0.7.0 below, a rollback to v0.7.0 **with the database restored**, and a second update have been run on a real server (an isolated staging install on an Ubuntu 24.04 VPS, without nginx or HTTPS) with the published assets, with no data lost; see [BUG_FIX_REPORT.md](../BUG_FIX_REPORT.md) section K. Not yet run on a server: the code-only rollback (1) below, and a fresh install. Take an off-server copy of your backups first.
 
 ## What changes for you
 
@@ -57,8 +57,8 @@ Download `yt-watch-tracker-v0.8.0-rc.1.zip` and `SHA256SUMS` from the release, c
    sudo systemctl restart watch-ledger
    cd /opt/watch-ledger/current && sudo bash scripts/health-check.sh
    ```
-   After a v0.7.0 → rc.1 update the previous release is `/opt/watch-ledger/releases/0.7.0`. v0.7.0 ignores tables and columns it does not know and does not refuse a database that has newer migrations, so it should start on the migrated database. **This downgrade has not been tested on a real server yet**; if in doubt, also restore the database (2).
-2. **Database too**, only if the data must return to exactly how it was before the update (this discards everything recorded since). Roll the code back first, then:
+   After a v0.7.0 → rc.1 update the previous release is `/opt/watch-ledger/releases/0.7.0`. v0.7.0 ignores tables and columns it does not know and does not refuse a database that has newer migrations, so it should start on the migrated database. **This code-only downgrade has not been tested on a real server yet**; if in doubt, also restore the database (2), which has been.
+2. **Database too**, only if the data must return to exactly how it was before the update (this discards everything recorded since). Tested on the staging server: the database came back equal to the pre-update backup in every table, and v0.7.0 started healthy. Roll the code back first, then:
    ```bash
    cd /opt/watch-ledger/current && sudo bash scripts/restore.sh /var/lib/watch-ledger/backups/pre-update/<backup file>
    ```
@@ -67,7 +67,7 @@ Download `yt-watch-tracker-v0.8.0-rc.1.zip` and `SHA256SUMS` from the release, c
 
 ## Limitations of the release candidate
 
-- The real update path (switching releases, the rollback, the folder repair for v0.7.0 → rc → final) is tested automatically on Linux only; it has not been run on a VPS.
+- Run on a real server (staging VPS): the v0.7.0 → rc.1 update, the rollback to v0.7.0 with the pre-update backup restored, and updating again afterwards. Tested automatically on Linux only, not on a server: the code-only rollback, an update made by rc.1's own `update.sh` (rc → final, including the folder repair), and a fresh install.
 - A v0.7.0 server's first update uses v0.7.0's `update.sh`, which records no update history and names the folder `0.8.0` (see above). History starts with the first update made by rc.1's `update.sh`.
 - Saved reports and the update-check settings are new data; a rollback to v0.7.0 keeps them in the database, unused.
 

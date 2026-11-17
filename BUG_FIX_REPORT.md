@@ -434,3 +434,73 @@ A31 and A32 are verified across platforms: the same commit gives the same three 
 ### Not verified
 - A VPS: install, update from v0.7.0, rollback to v0.7.0 on a migrated database, restore.
 - Publishing: no tag, no release; no asset built in this session may be published.
+
+## K. The published build, a real server and real Chrome (2026-11-09 to 2026-11-17)
+
+### The build that was published (commit `b17d4a7`)
+CI run 42573242980 (https://github.com/NimeshPiyathissa/YT-WATCH-LEDGER/actions/runs/42573242980, `develop/v0.8.0`, ubuntu-24.04, Node v22.23.4): every step passed. Server, end-to-end and installer tests: 408 tests, 406 passed, 0 failed, 2 skipped (the two `WL_EXT_E2E=1` tests). Installer suite inside it: 143 passed, 0 skipped, 0 failed (the Linux-only release-switch runs ran). Extension tests and the extension ZIP check passed.
+
+A clean build of `b17d4a7` on this Windows machine (clean working tree, no `--allow-dirty`) gave the same three assets as CI's Linux build:
+| Asset | SHA-256 (Windows = Linux CI) |
+|---|---|
+| tar, uncompressed | `9953c7afbd44415667ecd6929925acafbe1957230f8d608a513dd028214ce0c3` |
+| `watch-ledger-v0.8.0-rc.1.tar.gz` | `c99231456762ab499ab7fc3387cc2d57f31a356966045c37a45b4ef63b26bc3a` |
+| `yt-watch-tracker-v0.8.0-rc.1.zip` | `54459ac50bfb1a69471f4ae4bbc85d7daa9f098a16306185777264113404356b` |
+
+These are the assets that were tested on the staging server (below) and then published unchanged.
+
+### Staging server (2026-11-16 and 2026-11-17)
+**Setup.** An Ubuntu 24.04 VPS (about 1.4 GB of free memory) with an isolated staging install: its own folder and service account, the server bound to `127.0.0.1` only and reached through an SSH tunnel, a boot-disabled unit with memory and CPU limits, and a guard that lets the scripts start and stop only that unit. v0.7.0 was deployed from the published v0.7.0 tarball (checksum matching its published `SHA256SUMS`) by v0.7.0's own release-deploy code, not by `install.sh`. There was no nginx and no HTTPS. A fresh owner and a paired v0.7.0 extension produced the starting data.
+
+**Update v0.7.0 → rc.1 (v0.7.0's own `update.sh`, from the rc.1 tarball and its SHA-256).**
+| Check | Result |
+|---|---|
+| `update.sh --dry-run` | exit 0; folders, backups, database files, service and row counts unchanged |
+| `update.sh` | exit 0: checksum verified; pre-update backup verified (integrity ok, migrations 001-006); release installed beside v0.7.0 (`npm ci`, 97 packages); `007`, `008`, `009` applied (exactly 001-009 afterwards); switched; healthy on 0.8.0 |
+| Data | integrity ok; every data table's row count unchanged; audit log 4 → 4; new tables empty |
+| Service | one stop and one start of the staging unit only (about 1 s); service account, loopback binding, limits and boot state unchanged; no warning or error lines in the journal |
+| Folder name | `releases/0.8.0`, as documented for v0.7.0's script (A29); the rc.1 code is in it |
+
+**After the update (with the owner using the dashboard and the extension).**
+| Check | Result |
+|---|---|
+| Dashboard | every page loads on rc.1 and shows 0.8.0-rc.1 |
+| v0.7.0 extension → rc.1 server | kept syncing (events 12 → 18, a new viewing), no sync errors |
+| Fresh rc.1 extension | pairing code → pair request → approve; tracked real YouTube playback |
+| Revoke | the device's session ended (reason `device_revoked`); no events accepted afterwards |
+| Extension upgraded in place (v0.7.0 folder overwritten with rc.1, then reloaded) | same device record and pairing; reported 0.8.0; recorded tab visible, pause ×2, resume, end of viewing; nothing left in its queue |
+| Health over the whole test | integrity ok, foreign keys clean, 0 sync errors, 0 responses with status 500 or above, 0 service restarts. The few 401 responses (one per dashboard call) were most likely expired access tokens; no failure followed them. |
+| rc.1 `health-check.sh` | exit 2, only for what staging leaves out on purpose (nginx, an `http://` address, not enabled at boot); reports "Installed version: 0.8.0-rc.1" |
+
+**Backup and rollback.**
+| Check | Result |
+|---|---|
+| rc.1 `backup.sh` | verified backup (integrity ok, migrations 001-009, every one of the 22 tables equal to the live database) |
+| Rollback to v0.7.0: code switched back, then v0.7.0's `restore.sh` with the pre-update backup | exit 0; v0.7.0 started and is healthy; the live database equals the pre-update backup in every table (6 migrations); the rc.1 database was kept aside intact (integrity ok, nothing lost from its write-ahead log); one stop and one start only |
+| Update again (v0.7.0's `update.sh`) | it reused the kept `releases/0.8.0` (first checked byte-identical to the rc.1 tarball, `node_modules` aside); the new pre-update backup was byte-identical to the first one (`826e89b8…`), so the restored data was untouched; `007`-`009` applied, row counts unchanged, healthy, no warnings or errors |
+
+**Seen during the tests, product not changed** (see [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) section 11):
+- Two copies of the extension loaded in one Chrome profile (a v0.7.0 folder and an rc.1 folder, so two extension IDs and two devices) both opened a viewing for the same video. Only the copy installed first recorded fully; the other recorded only the start and the tab being hidden. Seen three times.
+- A device reports its client version as `manifest.json`'s numeric `version` (`0.8.0`), not `version_name` (`0.8.0-rc.1`).
+
+### Real-Chrome end-to-end test (2026-11-17, this Windows machine, `WL_EXT_E2E=1`, about 0.45 GB of free memory)
+| Run | Result |
+|---|---|
+| Real YouTube, run twice | 5 ok, 4 blocked, 0 failed. The extension loads with no manifest errors; pairing, the popup, live-viewing consent and revoke pass. Playback, sync, events and the outage check were **blocked**: YouTube did not serve a playable video to the automated browser. `node --test` still reports the test as passed, so read the summary line, not the exit code. |
+| 40 quick pause/resume cycles (local stand-in page) | 40 plays / 40 pauses on the page; 40 / 40 recorded exactly once; 0 late or odd |
+| Local stand-in watch page (`WL_E2E_MOCK=1`) | 9 ok, 0 blocked, 0 failed; 0 Chrome warnings |
+
+Real-YouTube playback by the rc.1 extension was checked by hand on staging (above), not by this test.
+
+### Publication (2026-11-17)
+Annotated tag `v0.8.0-rc.1` on `b17d4a7`; GitHub release marked *pre-release* with exactly the three assets above and `SHA256SUMS`. Downloaded back from GitHub: `sha256sum -c SHA256SUMS` OK and byte-identical to the tested files. The stale `dist/release/` build was not used.
+
+### Open findings (not fixed)
+- **A33, candidate (found by reading the code, not reproduced on a real install).** `scripts/install.sh` (`install_node`) unpacks the Node.js archive as root without `--no-same-owner` and without a `chown` afterwards. GNU tar run as root keeps the archive's owners, and the official Node.js archive is owned by uid/gid 1001. So `/opt/watch-ledger/node` on a server set up by `install.sh` is probably owned by whatever account has uid 1001, if any. Staging set Node up by its own script and is not affected.
+- Staging's operating system restarted about 15 system services after an `apt` install (Ubuntu's `needrestart`). On a production server the same can restart `watch-ledger` during unattended upgrades. Not a product defect; worth a line in the operations guide.
+
+### Not verified
+- A fresh install with `install.sh` on a VPS, nginx and HTTPS (staging used neither).
+- The code-only rollback (v0.7.0 running on the migrated database without a restore): staging rolled back with the database restore.
+- An update made by rc.1's own `update.sh` (rc.1 → a later release, including A29's folder repair): Linux CI only.
+- The release check against the live GitHub API; a real full disk during restore; A20.

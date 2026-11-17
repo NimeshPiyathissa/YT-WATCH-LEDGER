@@ -1,6 +1,6 @@
 # Known issues and incomplete work
 
-Last reviewed for extension/server version **0.8.0-rc.1** (2026-11-09). Sections 1-6 date from earlier versions and still apply; sections 7-10 are new in 0.8.0.
+Last reviewed for extension/server version **0.8.0-rc.1** (2026-11-17). Sections 1-6 date from earlier versions and still apply; sections 7-11 are new in 0.8.0.
 
 ## 1. Remote `resume_tracking` can override the user's pause (known conflict, kept by decision)
 
@@ -71,9 +71,10 @@ The v0.8 popup shows more (status, queue, live viewing). Chrome limits a popup t
 ## 8. What the release candidate has not been through yet
 
 - **Linux-only checks.** The installer suite's real update runs (switching releases, the automatic rollback, the v0.7.0 → rc → final folder repair, "never report success unless the new version runs") need symbolic links and run on Linux (CI on Ubuntu 24.04). On the Windows development machine they are reported as skipped.
-- **No VPS run yet.** Fresh install, update from v0.7.0, rollback to v0.7.0 on a migrated database, and the backup restore have been tested in a sandbox only.
+- **Partly run on a real server (2026-11-16/17).** On an isolated staging install (Ubuntu 24.04 VPS, no nginx or HTTPS), with the published rc.1 assets: the update from v0.7.0 with v0.7.0's `update.sh`, the extension and dashboard on rc.1, rc.1's `backup.sh`, a rollback to v0.7.0 **with** the pre-update backup restored, and a second update all worked with no data lost ([BUG_FIX_REPORT.md](../BUG_FIX_REPORT.md) section K). **Not yet run on a server:** a fresh install with `install.sh` (nginx and HTTPS included), and the code-only rollback (v0.7.0 running on the migrated database without a restore).
 - **The release check** has been tested against a stand-in for GitHub, not the live API.
 - **A20** (a resume recorded about 7 s late on real YouTube) is not reproduced and not fixed; the A19 fix is verified by tests and a stand-in page, not again on real YouTube (YouTube refused the automated browser).
+- **The real-Chrome test cannot play real YouTube here.** On 2026-11-17 YouTube again served no playable video to the automated browser: playback, sync, events and the outage check were *blocked* (the rest passed, and all 9 checks pass with the stand-in page). `node --test` still reports the test as passed, so read its summary line (`ok / blocked / failed`). Real-YouTube tracking by rc.1 was checked by hand on the staging server.
 
 ## 9. `update.sh --check` only knows full releases
 
@@ -82,3 +83,10 @@ It asks GitHub for the latest release, which by GitHub's design excludes pre-rel
 ## 10. The update history is a record, not evidence
 
 `/var/lib/watch-ledger/update-history.jsonl` is written by `update.sh` as root, in a folder the service account can also write to. The dashboard re-checks every line, but a compromised service could alter it. The audit log and the backups do not depend on it.
+
+## 11. Extension: install one copy per Chrome profile; the reported version is `0.8.0`
+
+Both seen on the staging server (2026-11-16); the product is unchanged.
+
+- **Two copies of the extension in one Chrome profile record badly.** Each copy loaded from its own folder gets its own extension ID, so it pairs as a separate device. With two copies active, both open a viewing for the same video, and only the copy installed first records fully; the other records only the start and the tab being hidden. Seen three times. Keep one copy per profile: to upgrade, unzip the new version **over the folder the extension was loaded from** and reload it ([UPGRADING.md](UPGRADING.md#extension)), which keeps the pairing. If a second copy was loaded, remove it in `chrome://extensions` and revoke its device in the dashboard.
+- **A device reports its version as `0.8.0`, not `0.8.0-rc.1`.** The extension sends `manifest.json`'s numeric `version` (Chrome allows numbers only there), not `version_name`. A device on a release candidate therefore shows as `0.8.0` on the Devices page, the same as the final 0.8.0 will. To tell them apart, open `chrome://extensions` on that browser, which shows the full version name. The server's own version (Updates page, `health-check.sh`) is reported correctly.
