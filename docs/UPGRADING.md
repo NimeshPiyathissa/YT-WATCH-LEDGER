@@ -1,6 +1,6 @@
 # Upgrading from v0.7.0 to v0.8.0
 
-> **Status.** v0.8.0 is the final release of the code published on 2026-11-17 as the release candidate v0.8.0-rc.1; only the version number changed. Tested on a real server with the rc.1 assets: the update from v0.7.0 below, a rollback to v0.7.0 **with the database restored**, and a second update, with no data lost ([BUG_FIX_REPORT.md](../BUG_FIX_REPORT.md) section K); and a fresh `install.sh` install with nginx and HTTPS (section L). Not yet run on a server: the code-only rollback (1) below. Known issues: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) section 12 (A33 has a one-line workaround). Take an off-server copy of your backups first.
+> **Status.** v0.8.0 is the final release of the code published on 2026-11-17 as the release candidate v0.8.0-rc.1; only the version number changed. Tested on a real server with the rc.1 assets: the update from v0.7.0 below, a rollback to v0.7.0 **with the database restored**, and a second update, with no data lost ([BUG_FIX_REPORT.md](../BUG_FIX_REPORT.md) section K); a fresh `install.sh` install with nginx and HTTPS (section L); and, with the published v0.8.0 assets, the update from rc.1 to v0.8.0 with rc.1's own `update.sh` (section M). Not yet run on a server: the code-only rollback (1) below. Known issues: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) section 12 (A33 has a one-line workaround). Take an off-server copy of your backups first.
 
 ## What changes for you
 
@@ -42,6 +42,8 @@ cd /opt/watch-ledger/current
 sudo ./scripts/update.sh --version v0.8.0            # --check reports full releases only
 ```
 
+**If rc.1 runs from a folder named `0.8.0`** (it was installed by v0.7.0's script; `readlink /opt/watch-ledger/current` shows `…/releases/0.8.0`), **skip `--dry-run`**. rc.1's dry run stops with "…is the running release but holds 0.8.0-rc.1, not 0.8.0" and changes nothing, because it does not simulate the folder rename. The real update renames the folder first and works ([A36](KNOWN_ISSUES.md#13-updating-rc1--v080-skip---dry-run-when-rc1-is-in-a-folder-named-080-a36)).
+
 It verifies the download against the release's `SHA256SUMS`, refuses a release whose `manifest.json` is inconsistent, takes a backup into `backups/pre-update/`, installs into `releases/<exact version>` (a folder that already exists but holds another version is set aside, never reused), migrates, switches, waits for the health check, and then confirms that the version it installed is the one the service is running. If any of that fails it switches the code back to the previous release and says so; it never reports success otherwise. The dashboard's **Updates** page shows the same steps filled in for your versions, the pre-update backups and the update history: [UPDATES.md](UPDATES.md).
 
 ## Extension
@@ -67,7 +69,7 @@ Download `yt-watch-tracker-v0.8.0.zip` and `SHA256SUMS` from the release, check 
 
 ## What has been tested
 
-- Run on a real server (staging VPS, with the rc.1 assets): the v0.7.0 → rc.1 update, the rollback to v0.7.0 with the pre-update backup restored, and updating again afterwards. A fresh `install.sh` install with nginx and HTTPS (Let's Encrypt *staging* certificate) on a new Ubuntu 24.04 VM. Tested automatically on Linux only, not on a server: the code-only rollback, and an update made by rc.1's own `update.sh` (rc → final, including the folder repair).
+- Run on a real server (staging VPS, with the rc.1 assets): the v0.7.0 → rc.1 update, the rollback to v0.7.0 with the pre-update backup restored, and updating again afterwards. A fresh `install.sh` install with nginx and HTTPS (Let's Encrypt *staging* certificate) on a new Ubuntu 24.04 VM. The update rc.1 → v0.8.0 with rc.1's own `update.sh`, including the folder repair, on the same staging server with the published v0.8.0 assets. Tested automatically on Linux only, not on a server: the code-only rollback.
 - A v0.7.0 server's first update uses v0.7.0's `update.sh`, which records no update history and names the folder `0.8.0` (see above). History starts with the first update made by rc.1's `update.sh`.
 - Saved reports and the update-check settings are new data; a rollback to v0.7.0 keeps them in the database, unused.
 

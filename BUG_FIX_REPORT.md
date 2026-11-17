@@ -502,8 +502,8 @@ Annotated tag `v0.8.0-rc.1` on `b17d4a7`; GitHub release marked *pre-release* wi
 ### Not verified
 - ~~A fresh install with `install.sh` on a VPS, nginx and HTTPS (staging used neither).~~ Done on 2026-11-17 with a Let's Encrypt *staging* certificate: see section L.
 - The code-only rollback (v0.7.0 running on the migrated database without a restore): staging rolled back with the database restore.
-- An update made by rc.1's own `update.sh` (rc.1 → a later release, including A29's folder repair): Linux CI only.
-- The release check against the live GitHub API; a real full disk during restore; A20.
+- ~~An update made by rc.1's own `update.sh` (rc.1 → a later release, including A29's folder repair): Linux CI only.~~ Done on staging on 2026-11-17 (rc.1 → v0.8.0): see section M.
+- ~~The release check against the live GitHub API~~ (done on 2026-11-17, section M); a real full disk during restore; A20.
 
 ## L. Fresh install with `install.sh`, nginx and HTTPS (2026-11-17, new AWS VM)
 
@@ -550,3 +550,46 @@ A new Ubuntu 24.04.5 VM (AWS, 2 vCPU, 1.9 GB of memory, no swap), checked clean 
 ### Not verified
 - A certificate from Let's Encrypt's production CA, and a browser loading the dashboard with a trusted certificate. Both need a real domain.
 - A real certificate renewal (only the dry run) and a reboot of the VM.
+
+## M. v0.8.0: the final release (2026-11-17)
+
+### The release commit and its build
+`f808b4e` on `release/v0.8.0` changes only the version: `manifest.json` `version_name`, `server/package.json` and `package-lock.json` go from `0.8.0-rc.1` to `0.8.0`, and the release-packaging test expects the final version. It also adds the CHANGELOG entry and the `UPGRADING.md` text for the final release. Compared with the `v0.8.0-rc.1` tag, the only non-documentation changes are those three files and the test.
+
+| Check | Result |
+|---|---|
+| CI run 44071692696 (push to `release/v0.8.0`, `f808b4e`) | green: 408 tests, 406 passed, 0 failed, 2 skipped (real-Chrome, opt-in); installer suite 143/0/0 |
+| CI run 44072892666 (PR #2) and 44073285520 (`main` after the merge, `cc5be9f`) | green, same numbers |
+| Release build, this Windows machine | `watch-ledger-v0.8.0.tar.gz` `e417472af42b016325ceebd932c3d1416cfe0c55e1a6d5e0f7a0adcc96fd71d8`, `yt-watch-tracker-v0.8.0.zip` `ce07fcbef26e815d60f93ae2596fa904776fbc6b664235fd6f2e1a5be0dd349e`, uncompressed tar `12021110…`: all three equal CI's Linux build |
+| Tarball compared with the published rc.1 tarball | 284 files each; differ only in the three version files, the test and four documents. In the extension ZIP only `manifest.json`'s `version_name` differs |
+
+### Staging: rc.1 → v0.8.0 with rc.1's own `update.sh`
+The staging server was running rc.1 from `releases/0.8.0`, a folder named by v0.7.0's `update.sh` (the A29 case). The v0.8.0 tarball above was applied with `update.sh --from-tarball … --sha256 …` from `current`, which is rc.1's script, through the staging wrapper and the systemctl guard.
+
+| Check | Result |
+|---|---|
+| `update.sh --dry-run` | **exit 1 (A36, below)**. Nothing changed: `current`, `releases/`, backups, service PID and restart count were all the same afterwards |
+| `update.sh` | exit 0. The folder repair renamed `releases/0.8.0` to `releases/0.8.0-rc.1` and pointed `current` at it. It then took a verified pre-update backup (integrity ok, 9 migrations) and installed v0.8.0 into a new `releases/0.8.0` (`npm ci`, 97 packages). "database is up to date". It switched, came up healthy, and confirmed "running 0.8.0" |
+| Folders | `releases/0.8.0` matches the v0.8.0 tarball and `releases/0.8.0-rc.1` the rc.1 tarball, file by file (`node_modules` aside). `0.7.0` kept; nothing pruned (3 releases kept) |
+| Data | integrity ok; migrations still exactly 001-009; every row count unchanged; audit log 4 → 4 |
+| Update history | first line written: `0.8.0-rc.1` → `0.8.0`, `success`, previous `0.8.0-rc.1`, the backup's file name |
+| Service and isolation | running as the staging account from `releases/0.8.0/server`, loopback only, limits and "disabled at boot" unchanged. Guard log: one stop and one start of the staging unit only. No warnings or errors in the journal; ssh and listeners unchanged |
+| `health-check.sh` | "Installed version: 0.8.0"; exit 2 only for what staging leaves out on purpose (nginx, HTTPS, start at boot) |
+
+### Publication
+- PR #2 merged into `main` (`cc5be9f`).
+- Annotated tag `v0.8.0` on `f808b4e`.
+- GitHub release "Watch Ledger v0.8.0", **not** a pre-release and marked **Latest**, with exactly the three assets above and `SHA256SUMS`.
+- Downloaded back: `sha256sum -c` OK, and each file is byte-identical to the tested one. v0.8.0-rc.1 and v0.7.0 stay pre-releases.
+- **Live release check:** GitHub's `releases/latest` returns `v0.8.0`. On staging, `update.sh --check` reported "Latest release: v0.8.0 … You are up to date", exit 0, with no service action and no history line.
+
+### Findings (not fixed)
+- **A36. rc.1's `update.sh --dry-run` fails in the A29 case.** When the running release folder is named after a different version than it holds (rc.1 in `releases/0.8.0`), the dry run announces the rename but, being a dry run, skips it. `deploy_release_dir` then finds `releases/0.8.0` as the running release holding `0.8.0-rc.1` and stops: "…is the running release but holds 0.8.0-rc.1, not 0.8.0. Nothing was changed." (exit 1).
+  - The real update is not affected: it renames first. This was shown on staging above and by the installer suite's rc → final tests, which do not cover a dry run.
+  - The defect is in the script of the release being updated *from* (rc.1), so a newer release cannot fix it for rc.1 servers. It is documented instead ([docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) section 13, [docs/UPGRADING.md](docs/UPGRADING.md), the v0.8.0 release notes).
+  - A fix in a later release should simulate the rename in the dry run.
+- A33, A34 and A35 (section L) remain open; A33's fix is planned for a later release.
+
+### Not verified
+- The code-only rollback (v0.7.0 on the migrated database without a restore); a production certificate on a real domain; a real full disk during restore; A20.
+- An update from v0.7.0 straight to v0.8.0 on a server. The installer suite checks that v0.7.0's `update.sh` accepts the v0.8.0 tarball, and staging did v0.7.0 → rc.1 with the same code.

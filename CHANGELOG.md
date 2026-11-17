@@ -2,13 +2,16 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [Semantic Versioning](https://semver.org/).
 
-## [0.8.0] - prepared 2026-11-17 (branch `release/v0.8.0`)
+## [0.8.0] - 2026-11-17
 
 ### v0.8.0 (final release)
 The same code as v0.8.0-rc.1, which was tested on a real server and on a fresh install (below). Only the version changes: `manifest.json` `version_name`, `server/package.json` and `package-lock.json` now say `0.8.0` (`manifest.json` `version` was already `0.8.0`), and the release-packaging test expects the final version. No migrations beyond `009`; no change to the code, the scripts or the extension.
 - **Updating from v0.7.0:** once v0.8.0 is published as a full release, v0.7.0's `update.sh --check` finds it. Run `sudo bash scripts/update.sh --version v0.8.0`; v0.7.0's script installs it into `releases/0.8.0`, which is now the right name. Details: `docs/UPGRADING.md`.
 - **Updating from v0.8.0-rc.1:** `sudo ./scripts/update.sh --version v0.8.0`. If v0.7.0's script had put rc.1 into a folder named `0.8.0`, rc.1's `update.sh` first renames it to `0.8.0-rc.1` (A29).
 - **Known issues carried over, not fixed** (`docs/KNOWN_ISSUES.md` section 12): A33 (the bundled Node.js is owned by uid 1000 after `install.sh`; workaround `sudo chown -R root:root /opt/watch-ledger/node`), A34 (`--staging-cert` installs fail their own checks), A35 (nginx's default site stays enabled).
+- **Published 2026-11-17** as the GitHub release `v0.8.0`, **Latest** and not a pre-release. Tag `v0.8.0` = commit `f808b4e`, merged into `main` by PR #2. Assets: `watch-ledger-v0.8.0.tar.gz` (`e417472a…`), `yt-watch-tracker-v0.8.0.zip` (`ce07fcbe…`) and `SHA256SUMS`; byte-identical to CI's Linux build, and downloaded back unchanged. GitHub's latest release is now `v0.8.0`, and `update.sh --check` reports it.
+- **Verified on the staging server with these assets:** rc.1 → v0.8.0 with rc.1's own `update.sh`. The mis-named rc.1 folder was renamed to `0.8.0-rc.1` and v0.8.0 got its own folder. A verified pre-update backup was taken; migrations and every row count were unchanged; the first update-history line was written; v0.8.0 is healthy; nothing outside the staging service was touched. CI green on `release/v0.8.0`, on PR #2 and on `main` (406 passed, 0 failed, 2 skipped; installer 143/0/0).
+- **A36 (new; documented, cannot be fixed by a newer release):** on an rc.1 server whose folder is named `0.8.0` (installed by v0.7.0's script), rc.1's `update.sh --dry-run` exits 1 without changing anything. The real update works. Skip `--dry-run` there (`docs/KNOWN_ISSUES.md` section 13).
 
 ### v0.8.0-rc.1 (release candidate, prepared 2026-11-09; published 2026-11-17 as a GitHub pre-release, tag `v0.8.0-rc.1` = commit `b17d4a7`)
 Version metadata: `manifest.json` `version_name` `0.8.0-rc.1` (`version` stays `0.8.0`), `server/package.json` and `package-lock.json` `0.8.0-rc.1`. Database migrations since v0.7.0: `007` (device consents and sync diagnostics), `008` (notifications), `009` (saved reports), all additive. Upgrading from v0.7.0, the RC limits and rolling back: `docs/UPGRADING.md`.
