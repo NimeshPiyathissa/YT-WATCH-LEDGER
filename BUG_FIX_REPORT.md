@@ -496,11 +496,57 @@ Real-YouTube playback by the rc.1 extension was checked by hand on staging (abov
 Annotated tag `v0.8.0-rc.1` on `b17d4a7`; GitHub release marked *pre-release* with exactly the three assets above and `SHA256SUMS`. Downloaded back from GitHub: `sha256sum -c SHA256SUMS` OK and byte-identical to the tested files. The stale `dist/release/` build was not used.
 
 ### Open findings (not fixed)
-- **A33, candidate (found by reading the code, not reproduced on a real install).** `scripts/install.sh` (`install_node`) unpacks the Node.js archive as root without `--no-same-owner` and without a `chown` afterwards. GNU tar run as root keeps the archive's owners, and the official Node.js archive is owned by uid/gid 1001. So `/opt/watch-ledger/node` on a server set up by `install.sh` is probably owned by whatever account has uid 1001, if any. Staging set Node up by its own script and is not affected.
+- **A33, confirmed on a fresh install (section L).** `scripts/install.sh` (`install_node`) unpacks the Node.js archive as root without `--no-same-owner` and without a `chown` afterwards, so GNU tar keeps the archive's owners. It was first guessed to be uid 1001; on the fresh install it was uid/gid 1000, the `ubuntu` login user. Details and impact are in section L. Staging set Node up by its own script and is not affected.
 - Staging's operating system restarted about 15 system services after an `apt` install (Ubuntu's `needrestart`). On a production server the same can restart `watch-ledger` during unattended upgrades. Not a product defect; worth a line in the operations guide.
 
 ### Not verified
-- A fresh install with `install.sh` on a VPS, nginx and HTTPS (staging used neither).
+- ~~A fresh install with `install.sh` on a VPS, nginx and HTTPS (staging used neither).~~ Done on 2026-11-17 with a Let's Encrypt *staging* certificate: see section L.
 - The code-only rollback (v0.7.0 running on the migrated database without a restore): staging rolled back with the database restore.
 - An update made by rc.1's own `update.sh` (rc.1 → a later release, including A29's folder repair): Linux CI only.
 - The release check against the live GitHub API; a real full disk during restore; A20.
+
+## L. Fresh install with `install.sh`, nginx and HTTPS (2026-11-17, new AWS VM)
+
+### Setup
+A new Ubuntu 24.04.5 VM (AWS, 2 vCPU, 1.9 GB of memory, no swap), checked clean beforehand: no Watch Ledger files or account; nginx, certbot and Node.js not installed; no account with uid 1001. This VM is separate from the staging server, which was not touched. The published `watch-ledger-v0.8.0-rc.1.tar.gz` was uploaded with `SHA256SUMS` (`sha256sum -c` OK) and installed with `install.sh --non-interactive --staging-cert --agree-tos --yes`. The domain was an `sslip.io` name, which resolves to the VM's IP, because no domain of our own points at the VM yet. The certificate came from Let's Encrypt's **staging** CA, so browsers and Node do not trust it. Node.js v22.23.5 was installed by the installer.
+
+### Install
+| Run | Exit | Result |
+|---|---|---|
+| 1 | 1 | Stopped at the admin step: the test's generated password had no symbol. Nothing on the system had changed. |
+| 2 | 3 | Steps 1-5 passed: packages; Node with its checksum verified; service account; release deployed (`npm ci`, 97 packages); migrations 001-009; admin created; service healthy; nginx HTTP config. The certificate request failed with "Timeout during connect" on port 80 because the cloud firewall (AWS security group) did not allow inbound 80/443. On the VM, nginx was listening and nothing blocked the port. The installer's message names this cause. |
+| 3, `--resume` after 80/443 were opened | 1 | Completed steps were skipped or re-checked; the database, configuration and keys were kept. Staging certificate issued; HTTPS with a redirect; renewal dry run passed; ufw on (22, 80, 443); extension ZIP built for the HTTPS address. Final verification: server health ok, but the smoke test failed on every HTTPS check because Node does not trust the staging CA (`UNABLE_TO_GET_ISSUER_CERT_LOCALLY`, A34). |
+
+### Verification
+| Check | Result |
+|---|---|
+| `scripts/smoke-test.mjs` (authenticated, default checks) from the development machine, trusting the Let's Encrypt staging root downloaded from letsencrypt.org (`NODE_EXTRA_CA_CERTS`) | **13/13 passed**: health, dashboard, security headers, HTTP → HTTPS redirect, anonymous caller refused, bad pairing code refused, wrong password refused, admin login with HttpOnly and SameSite=Strict cookies, cross-origin write refused, devices list, database and backup status, history and video queries, a pairing code created and cancelled. The same run without the staging root fails in the same way as the installer's check. |
+| TLS | 1.0 and 1.1 refused; 1.2 and 1.3 accepted |
+| Headers | HSTS (2 years, includeSubDomains), CSP, `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`; `no-store` on the API |
+| Permissions | configuration folder `root:watchledger 0750`, env file `0640`; data, backups and extension folders `watchledger 0750`; backup file `0600`; no world-writable files in `releases/` |
+| systemd unit | runs as `watchledger` with NoNewPrivileges, ProtectSystem=strict, ProtectHome, PrivateTmp, UMask 0077; app bound to `127.0.0.1` only |
+| Enabled at boot | `watch-ledger`, nginx, `certbot.timer` and ufw (the VM was not rebooted) |
+| `nginx -t`, service journal | config ok; no warnings or errors |
+| rc.1 `health-check.sh` | exit 2, for one reason only: its HTTPS check does not trust the staging CA (A34) |
+
+### Findings (not fixed)
+- **A33, confirmed.** On this install, 5,865 of the 5,866 entries in `/opt/watch-ledger/node` (everything but the folder itself, including `bin/node` and npm) are owned by uid/gid **1000**, which is `ubuntu`, the default login user of Ubuntu cloud images. `bin/node` can be written by that user without sudo. That binary is run:
+  - by systemd as `watchledger`, the account that can read `MASTER_KEY`
+  - by `update.sh` as `watchledger`
+  - **as root by `install.sh`**: the Node version check on every re-run or `--resume`, and the final smoke test
+
+  So on a server where uid 1000 is an ordinary user without sudo, that user can get root the next time the installer runs. Fix: extract with `--no-same-owner` and `chown -R root:root` the Node folder. Existing installs also need the ownership repaired (workaround in [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) section 12). **Decision (2026-11-17): not fixed now; kept as a documented known issue for a later release candidate (rc.2).** The risk is low for the intended single-owner setup, where the login user already has sudo.
+- **A34. `--staging-cert` can never pass the product's own checks.** The installer's final smoke test and `health-check.sh` both reject the staging CA, so a staging install ends with exit 1 and `health-check.sh` reports exit 2, even though the installation works (13/13 above).
+- **A35. nginx's default site is left enabled.** The VM's bare IP answers "Welcome to nginx!" on port 80, and port 443 also answers on the bare IP. This is about hardening and revealing information, not about function.
+- Smaller items:
+  - The database files are `0644` despite the unit's UMask 0077, because the installer creates them. The `0750` folder above them protects them.
+  - The installer warned "No certbot renewal timer found" while `certbot.timer` was enabled and scheduled. The same check rerun by hand passed five times, so the cause is unknown.
+  - On `--resume` the installer has no admin password, so it runs only the anonymous smoke test.
+  - Cosmetic: the domain prompt text is printed in non-interactive mode; "SSH (22 )" has a stray space; the extension hint says `scp root@…`, but Ubuntu cloud images do not allow root SSH.
+- Not product defects:
+  - The cloud firewall must allow inbound 80 and 443 before the certificate step.
+  - Ubuntu's `needrestart` restarted about 15 services, `ssh` among them, during the package step, as it did on staging.
+
+### Not verified
+- A certificate from Let's Encrypt's production CA, and a browser loading the dashboard with a trusted certificate. Both need a real domain.
+- A real certificate renewal (only the dry run) and a reboot of the VM.

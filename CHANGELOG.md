@@ -48,8 +48,17 @@ An isolated staging install on an Ubuntu 24.04 VPS (its own service user, loopba
 - Against real YouTube (run twice): 5 ok, 0 failed, 4 blocked. Loading, pairing, the popup, live-viewing consent and revoke passed; playback, sync, events and the outage check were blocked because YouTube did not serve a playable video to the automated browser (real-YouTube playback was instead checked by hand on staging, above). 40 quick pause/resume cycles: 40 / 40 recorded exactly once, 0 late.
 - With the local stand-in watch page (`WL_E2E_MOCK=1`): 9 ok, 0 blocked, 0 failed, 0 Chrome warnings.
 
+#### Fresh install with `install.sh`, nginx and HTTPS (2026-11-17, new Ubuntu 24.04 VM)
+The published rc.1 tarball (checksum verified) installed with `install.sh --non-interactive --staging-cert`. The domain was an `sslip.io` name and the certificate came from Let's Encrypt's staging CA, because no domain of our own points at the VM yet. Details are in `BUG_FIX_REPORT.md` section L.
+- **Install:** packages, Node.js v22.23.5 (checksum verified), service account, release (`npm ci`), migrations 001-009, admin account, service, nginx, certificate, HTTPS redirect, renewal dry run, firewall (22, 80, 443) and the extension ZIP. The first certificate attempt stopped with "Timeout during connect" because the cloud firewall blocked port 80; after it was opened, `install.sh --resume` continued and kept the database and keys.
+- **HTTPS smoke test with the admin account** (staging root trusted): 13/13 passed. TLS 1.2/1.3 only; HSTS, CSP, `nosniff`, `X-Frame-Options` and `Referrer-Policy` set; locked-down permissions and systemd sandboxing; app bound to `127.0.0.1`.
+- **Found, not fixed in rc.1** (`docs/KNOWN_ISSUES.md` section 12):
+  - **A33 confirmed:** the bundled Node.js is owned by uid 1000, the `ubuntu` login user, who can change the binary that the service and the installer run (the installer runs it as root). The fix is deferred to a later release candidate; workaround: `sudo chown -R root:root /opt/watch-ledger/node`.
+  - **A34:** with `--staging-cert`, the installer's final check and `health-check.sh` always fail because staging certificates are untrusted.
+  - **A35:** nginx's default site stays enabled on the bare IP.
+
 #### Not verified
-A real full disk during restore. See `BUG_FIX_REPORT.md` section D.
+A real full disk during restore (see `BUG_FIX_REPORT.md` section D). An install with a production certificate on a real domain, a real certificate renewal, and a reboot (section L).
 
 ### v0.8.0-beta.1 (this milestone; includes everything under alpha)
 #### Added
