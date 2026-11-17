@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { makeApp, addOwner, login, enrollDevice, session } from "./helpers.js";
+import { makeApp, addOwner, login, enrollDevice, session, allowLiveView } from "./helpers.js";
 import { openDb, migrate } from "../src/db.js";
 import { decryptJSON } from "../src/lib/crypto.js";
 import { purgeDevice } from "../src/lib/retention.js";
@@ -205,6 +205,7 @@ test("clock skew: ts keeps the device time for durations, ts_adj puts it on the 
 
 test("the owner's open pages are told about new events, and only about new ones", async () => {
   const { app, db, dev, send } = await setup();
+  await allowLiveView(app, dev);
   const admin = db.prepare("SELECT admin_id FROM devices WHERE id=?").get(dev.deviceId).admin_id;
   const got = [];
   const unsub = app.hub.subscribeAdmin(admin, (type, data) => got.push([type, data]));
@@ -255,14 +256,14 @@ test("migration 006 is additive: a database at v0.6.0 with data upgrades with ev
   db.prepare("INSERT INTO sessions(device_id,session_id,enc,video_id,start_ts,start_ts_adj,rev,updated_at) VALUES('d','s1',x'00','v1',5,5,2,9)").run();
   db.prepare("INSERT INTO videos(device_id,video_id,enc,last_watched,updated_at) VALUES('d','v1',x'00',7,9)").run();
   const before = { sessions: db.prepare("SELECT * FROM sessions").all(), videos: db.prepare("SELECT * FROM videos").all(), devices: db.prepare("SELECT * FROM devices").all() };
-  assert.deepEqual(migrate(db), ["006_video_events.sql"]);
+  assert.deepEqual(migrate(db, { upTo: "006_video_events.sql" }), ["006_video_events.sql"]);
   assert.deepEqual(db.prepare("SELECT * FROM sessions").all(), before.sessions);
   assert.deepEqual(db.prepare("SELECT * FROM videos").all(), before.videos);
   const dev = db.prepare("SELECT * FROM devices").get();
   assert.equal(dev.last_events_at, null);
   assert.deepEqual({ ...dev, last_events_at: undefined }, { ...before.devices[0], last_events_at: undefined });
   for (const t of ["video_playback_events", "video_sessions", "video_pause_intervals", "video_watch_segments", "video_analytics"]) assert.equal(db.prepare(`SELECT COUNT(*) n FROM ${t}`).get().n, 0);
-  assert.deepEqual(migrate(db), [], "running it again changes nothing");
+  assert.deepEqual(migrate(db, { upTo: "006_video_events.sql" }), [], "running it again changes nothing");
   // an old session has no event history and none is invented for it
   assert.equal(db.prepare("SELECT COUNT(*) n FROM video_sessions WHERE session_id='s1'").get().n, 0);
 });

@@ -8,14 +8,14 @@ const FAIL_WINDOW_MS = 15 * 60 * 1000;
 // Redeeming it creates a device session. By default the device is connected at once (the owner-issued code is the
 // authorisation); a code generated with "require approval" leaves the device PENDING until the owner approves it.
 export default async function (app, { db }) {
-  const maxFails = Number(process.env.PAIRING_MAX_FAILS) || 5;
+  const maxFails = () => Number(process.env.PAIRING_MAX_FAILS) || 5; // read per request: the owner can change it without a restart
   const fails = new Map(); // ip -> { n, first, lockedUntil }: wrong codes lock that address out for a while
 
   function failed(ip) {
     const now = Date.now(), f = fails.get(ip);
     const cur = f && now - f.first < FAIL_WINDOW_MS ? f : { n: 0, first: now, lockedUntil: 0 };
     cur.n++;
-    if (cur.n >= maxFails) cur.lockedUntil = now + FAIL_WINDOW_MS;
+    if (cur.n >= maxFails()) cur.lockedUntil = now + FAIL_WINDOW_MS;
     fails.set(ip, cur);
     if (fails.size > 10000) for (const [k, v] of fails) if (now - v.first > FAIL_WINDOW_MS && v.lockedUntil < now) fails.delete(k);
   }

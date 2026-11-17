@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import argon2 from "argon2";
-import { makeApp, addOwner, login, enrollDevice, session } from "./helpers.js";
+import { makeApp, addOwner, login, enrollDevice, session, allowLiveView } from "./helpers.js";
 import { uuid } from "../src/lib/crypto.js";
 
 const require = createRequire(import.meta.url);
@@ -141,6 +141,7 @@ test("pauses: every interval in order with stats; open and unresolved ones are l
 
 test("live status: playing, paused (with since), buffering, completed, and DEVICE OFFLINE when the device is not connected", async () => {
   const c = await setup();
+  await allowLiveView(c.app, c.dev);
   const t = Date.now() - 20 * S;
   await c.send(viewing("l1", v => v.play().wait(10), { start: t }));
   assert.equal((await c.get("/api/video/vidA/live")).json().status, "offline", "no real-time connection: the device is offline");

@@ -6,6 +6,8 @@ One system for the extension (popup, dashboard, settings, admin console) and Wat
 
 Page frames are separate because they differ: `lib/shell.css` (extension: top bar + tabs) and `server/web/styles.css` (Watch Ledger: sidebar / drawer, lanes, device cards, sign-in). Both only add layout; every colour, size and component comes from `theme.css`.
 
+`server/web/ui.css` (v0.8) is a Watch Ledger-only layer on top: elevation and motion tokens, the grouped sidebar, KPI tiles, rings and the Analytics / Health components. It is additive and does not change the shared `lib/theme.css`, so the extension is unaffected. Blur is used only on the sidebar and top bar and is switched off for `prefers-reduced-transparency`; every animation sits behind `prefers-reduced-motion: no-preference`.
+
 No inline styles anywhere (the server CSP is `default-src 'self'`). Fonts and icons are local files.
 
 ## Direction

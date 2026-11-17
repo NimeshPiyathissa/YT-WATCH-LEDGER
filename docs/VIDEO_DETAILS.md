@@ -70,3 +70,9 @@ A header (thumbnail, title, channel, URL, duration, status, completion badge, co
 - After a video ends, the viewing stays open for 2 minutes (was: ended immediately).
 - A viewing left without an end (crash) is closed at its last heartbeat, which also gives the History row an end time.
 - Sessions snapshots may carry a validated channel link (`channelUrl`, `channelId`).
+
+## v0.8: timeline and live status
+
+- **Live status needs consent.** The current-state banner (LIVE WATCHING / PAUSED / BUFFERING) is shown only for a device whose user allowed live viewing; otherwise it says **LIVE VIEW OFF** and the page shows what was recorded up to the last sync. See [LIVE_MONITORING.md](LIVE_MONITORING.md).
+- **Overview ribbon, quick filters and viewing boundaries** are described in [ADMIN_DASHBOARD.md](ADMIN_DASHBOARD.md#timeline-video-details-v08). Ordering and de-duplication are one tested module (`server/web/timeline.js`).
+- YouTube's single-page navigation (moving to another video without a page load) ends the viewing and starts a new one in the content script; this is covered by `tests/tracker-dom.test.js`.

@@ -26,7 +26,8 @@ export default async function (app, { db }) {
     const pendingReq = db.prepare("SELECT COUNT(*) n FROM session_deletion_requests WHERE device_id=? AND status='pending'");
     const pairings = db.prepare("SELECT COUNT(*) n FROM enroll_codes WHERE device_id=?");
     return db.prepare(`SELECT id,label,platform,status,enrolled_at,approved_at,last_seen,last_push_at,pending_count,last_error,clock_skew_ms,
-                       client_version,retention_days,install_id FROM devices WHERE admin_id=? ORDER BY enrolled_at`).all(req.admin.id)
+                       client_version,retention_days,install_id,live_view,live_view_at,consent_tracking,consent_detail,queue_events,queue_dropped
+                       FROM devices WHERE admin_id=? ORDER BY enrolled_at`).all(req.admin.id)
       .map(({ install_id, ...d }) => {
         const s = sess.get(d.id), live = app.hub.isOnline(d.id);
         const conn = connectionOf(d, { live, activeSessions: s.n, now });

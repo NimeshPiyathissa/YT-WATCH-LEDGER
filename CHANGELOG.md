@@ -2,6 +2,99 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] - v0.8.0 development (branch `develop/v0.8.0`)
+
+### v0.8.0-rc.1 (release candidate, prepared 2026-11-09; published 2026-11-17 as a GitHub pre-release, tag `v0.8.0-rc.1` = commit `b17d4a7`)
+Version metadata: `manifest.json` `version_name` `0.8.0-rc.1` (`version` stays `0.8.0`), `server/package.json` and `package-lock.json` `0.8.0-rc.1`. Database migrations since v0.7.0: `007` (device consents and sync diagnostics), `008` (notifications), `009` (saved reports), all additive. Upgrading from v0.7.0, the RC limits and rolling back: `docs/UPGRADING.md`.
+
+#### Added
+- **Release packaging** (`tools/build-release.mjs`): builds `watch-ledger-v<version>.tar.gz` (tracked files only, one top-level folder, file modes from git, owner root, reproducible), the extension ZIP and `SHA256SUMS`, and verifies them; refuses inconsistent versions, files that must never ship (secrets, keys, databases, backups, logs, `node_modules`), private keys or tokens in any file, and uncommitted changes. Procedure: `docs/RELEASING.md`.
+- **Update Manager** (`#/updates`, under System): installed version and release channel, Node.js and uptime, the history of updates made with `scripts/update.sh`, pre-update backups with Verify, the releases kept for rollback, and copyable, version-specific update and rollback commands. Read-only: it never runs an update, rollback or restore, and no route can start a process (checked by a test). Opt-in release check (Settings → Updates, off by default; only on **Check now**; no credentials sent, no token read; 10 s, 1 MB, no redirects; strict SemVer; never a downgrade; stable servers are offered stable releases only, pre-release servers newer pre-releases of their line only when switched on). `GET /api/updates`, `POST /api/updates/check`, `POST /api/updates/backups/:name/verify`. `update.sh` now appends one JSON line per real update attempt to `/var/lib/watch-ledger/update-history.jsonl` (additive and isolated: its behaviour, options and exit codes are unchanged). See `docs/UPDATES.md`.
+- **Reports Studio** (`#/reports`): daily, weekly (Monday to Sunday), monthly and custom (up to 366 days) watch reports on Sri Lanka days, from the Analytics engine (real playback only, overlapping playback counted once), with the previous period for comparison. Device, channel and video filters (a filtered total is the fair share, so it matches the unfiltered figure exactly). Saved report configurations (up to 50, encrypted, migration `009_saved_reports.sql`; day / week / month ones open on the current period). CSV (by day, viewings, videos, channels, devices, hours; formula-safe), JSON, and a print-ready page for Save as PDF; every export audited. Loading, empty and error states; responsive down to phone width; the report is part of the address. `GET /api/reports`, `GET /api/reports/export`, `GET|POST /api/reports/saved`, `PUT|DELETE /api/reports/saved/:id`, all owner-only and validated. "Reports" can be the page the dashboard opens on. See `docs/REPORTS.md`.
+- **Settings Studio** (`#/settings`): retention, audit retention, backup schedule and keep count, pairing lifetime and lock-out, notification thresholds, and the owner's preferences (landing page, compact tables), all validated by the server, applied without a restart and audited with old and new values. Shortening retention shows how many sessions would be deleted and needs that number confirmed. Settings that need a restart are listed read-only. See `docs/SETTINGS.md`.
+- **Notification Center** (in the dashboard only; nothing is sent anywhere): eight configurable kinds, thresholds, a sidebar count, Active and History views, mark read and dismiss, retention. Migration `008_notifications.sql`. See `docs/NOTIFICATIONS.md`.
+- **Real-Chrome end-to-end test** (`WL_EXT_E2E=1 node --test server/test/ext-e2e.test.js`, `scripts/lib/chrome-ext.mjs`): the built extension in a temporary Chrome profile against real YouTube and a throwaway server. Guided manual list: `docs/MANUAL_TEST_CHECKLIST_EXTENSION.md`.
+- **Backup Manager.** *Data & backups -> Verify* (and `restore.js --inspect`) checks a backup without changing anything: integrity, same / older / newer release, and whether this server's `MASTER_KEY` can read it. `GET /api/system/backups`, `POST /api/system/backups/:name/verify` (audited). See `docs/BACKUP_RECOVERY.md`.
+- **Security Center** page and `GET /api/security/overview`: plain-language findings, where the owner is signed in, sign out everywhere else / everywhere, change password (`/api/auth/sessions`, `/sign-out-others`, `/sign-out-all`, `/password`). See `docs/SECURITY_CENTER.md`.
+- Audit log filters and paging (`?action=`, `?before=`, `?limit=`); failed sign-ins are audited; the audit log is capped by size as well as age.
+
+#### Fixed
+- **Release candidate to final update kept running the release candidate (A29).** v0.7.0's `update.sh` installed a 0.8.0 pre-release into `releases/0.8.0`; the final 0.8.0's update would have found that folder "already deployed", reported success and kept running the release candidate, with no release to roll back to. `update.sh` now renames a running release folder after the version it really holds before anything else, reuses a folder only when its `manifest.json` (`version` and `version_name`) and `.install-complete` name the exact version, never reuses or replaces the running release for another version, refuses a release whose `version` and `version_name` disagree, and after the health check confirms that the intended version is the one running (link, manifest, `server/package.json`, and the service's working folder) or rolls back. The Updates page marks a folder named after another version.
+- **Scripts were not executable in the release (A30).** v0.7.0's tarball had no executable bits, so `sudo ./scripts/update.sh` (and backup, restore, health-check) answered "command not found". The scripts are executable in git and in the release tarball; the Updates page's commands and the upgrade guide use `sudo bash scripts/...`, which works on v0.7.0 servers too.
+- **The release archive's checksum depended on the build machine (A32).** zlib writes the build machine's operating system into the gzip header, so the same commit gave a different `.tar.gz` and `SHA256SUMS` on Windows and on Linux. The header is now fixed (OS byte "Unix"), so every machine builds byte-identical assets, and verification refuses a tarball without that header. Verified on 2026-11-09: release tests 12 / 12, server suite 406 pass / 0 fail / 2 skipped, installer suite 142 ok / 0 failed, extension tests 272 / 0; this machine's `.tar.gz` of `4fcd083` now equals the Linux CI build (`b4115526…`).
+- **A release built on Windows was not the commit (A31).** The release was packaged from the working tree, which a Windows checkout (`core.autocrlf`) fills with CRLF line endings, so it shipped CRLF sources and docs (the shell scripts were kept LF by `.gitattributes`) and was not reproducible. The tarball and the extension ZIP are now built from the commit's exact bytes, and the build verifies every file against the commit. Verified on 2026-11-09: server suite 404 pass / 0 fail / 2 skipped, installer suite 142 ok / 0 failed (11 release-switch runs skipped here, Linux only), extension tests 272 checks / 0 failed, `ui-check.mjs` 122 / 0.
+- Headless-Chrome test profiles could still be left half-deleted; removal now retries until the folder is gone (A26 follow-up). The dashboard check (`ui-check.mjs`) waits for rate-limit headroom instead of tripping the server's 300-requests-a-minute limit (A27). The installer test's time limit fits its run time under the full suite (A28).
+- A print-ready report opened after the dashboard had been idle for more than 15 minutes showed only `{"error":"unauthorized"}`: the new tab has no script to renew the sign-in. The dashboard now renews it before opening the tab (Video Details and Reports) (A25).
+- The test suites left every temporary folder behind (1,743 folders, 2.7 GB had piled up, enough to fill a nearly full disk); temporary folders and Chrome profiles are now removed when a test run ends (A26).
+- An invalid `BACKUP_KEEP` (for example `abc`) deleted every backup including the new one, and a backup interval that was not a number silently switched scheduled backups off (A22). Bad environment values are now ignored, reported and replaced by the default.
+- The Data page changed the retention window and deleted data immediately, without showing how much; the control now lives in Settings Studio with a count and a confirmation (A23). The old API route is unchanged.
+- Settings Studio overwrote the backup keep count and interval a caller gave the app with the built-in defaults; an explicit owner or environment value still wins, otherwise the caller's value stands (A24). Re-verified on 2026-11-09: server suite 354 pass / 0 fail / 2 skipped, extension tests 272 checks / 0 failed, `ui-check.mjs` 104 / 0.
+- The Security page's sidebar entry and empty state used an icon that does not exist (an unknown name draws a warning symbol); a test now checks every icon name the dashboard and the extension use (A21).
+- The end of a viewing could be lost with nothing left to recover from: the saved recorder state is now kept until the service worker has stored the end event, duplicate end events are dropped, and recovery never closes a viewing twice (A19; measured in real Chrome).
+- A seek that was slow to finish was counted as playing time in the event-based totals (A18; found by driving real Chrome on real YouTube). Mirrored in all three copies of `playback.js`.
+- Several simultaneous dashboard requests refreshing with one cookie could sign the owner out (A7; now also reproduced and verified in headless Chrome).
+- Restore: refuses backups from a newer release or that this key cannot read; writes atomically (a failed copy leaves the live database untouched); the safety copy keeps un-merged write-ahead-log data; verifies the result. Crashed backups leave no permanent `.partial` files. Details in `BUG_FIX_REPORT.md` (A8-A12).
+- Expired owner sign-in tokens are deleted. Ending another browser no longer makes its retry look like theft (A14, B5).
+
+#### Verified on a real server (staging, 2026-11-16 and 2026-11-17)
+An isolated staging install on an Ubuntu 24.04 VPS (its own service user, loopback port reached through an SSH tunnel, boot-disabled unit), upgraded with **v0.7.0's own `update.sh`** from the verified rc.1 tarball (`watch-ledger-v0.8.0-rc.1.tar.gz`, SHA-256 `c9923145…`), the path real users take.
+- **Update v0.7.0 → rc.1:** `update.sh --dry-run` changed nothing; the real update verified the checksum, took a verified pre-update backup (integrity ok, migrations 001-006), applied `007`-`009` (exactly 001-009 afterwards), switched and passed the health check. Every data table's row count was unchanged, the service restarted once (about 1 s), no warnings or errors were logged, and the service user, loopback binding, resource limits and boot state were unchanged.
+- **After the update:** every dashboard page on rc.1; a v0.7.0 extension against the rc.1 server; a fresh rc.1 extension tracking real YouTube playback; pairing code → pair request → approve; revoke (no events accepted afterwards); an extension upgraded in place from v0.7.0 to rc.1 kept its pairing and tracked play, pause, resume, tab hidden/visible and the end of the viewing. Database integrity and foreign keys clean, no sync errors, no 5xx responses, no service restarts.
+- **Backup and rollback:** rc.1's `backup.sh` made a verified backup holding every table; rolling back to v0.7.0 with v0.7.0's `restore.sh` and the pre-update backup gave exactly the pre-update data (all tables), kept the rc.1 database aside intact, and v0.7.0 started healthy.
+- **Upgrade again after the rollback:** `update.sh` reused the kept `releases/0.8.0` only after it was checked byte-identical to the rc.1 tarball, took a new pre-update backup (byte-identical to the first one: the restored data was untouched), applied `007`-`009` and passed the health check with every row count unchanged.
+- Seen during the tests, product not changed: two copies of the extension loaded in one Chrome profile record properly only in the first one installed (the other records only the start and tab-hidden events), so install one copy; a device's reported client version is the manifest `version` (`0.8.0`), not `version_name` (`0.8.0-rc.1`).
+
+#### Real-Chrome end-to-end test (2026-11-17, Windows, `WL_EXT_E2E=1`)
+- Against real YouTube (run twice): 5 ok, 0 failed, 4 blocked. Loading, pairing, the popup, live-viewing consent and revoke passed; playback, sync, events and the outage check were blocked because YouTube did not serve a playable video to the automated browser (real-YouTube playback was instead checked by hand on staging, above). 40 quick pause/resume cycles: 40 / 40 recorded exactly once, 0 late.
+- With the local stand-in watch page (`WL_E2E_MOCK=1`): 9 ok, 0 blocked, 0 failed, 0 Chrome warnings.
+
+#### Fresh install with `install.sh`, nginx and HTTPS (2026-11-17, new Ubuntu 24.04 VM)
+The published rc.1 tarball (checksum verified) installed with `install.sh --non-interactive --staging-cert`. The domain was an `sslip.io` name and the certificate came from Let's Encrypt's staging CA, because no domain of our own points at the VM yet. Details are in `BUG_FIX_REPORT.md` section L.
+- **Install:** packages, Node.js v22.23.5 (checksum verified), service account, release (`npm ci`), migrations 001-009, admin account, service, nginx, certificate, HTTPS redirect, renewal dry run, firewall (22, 80, 443) and the extension ZIP. The first certificate attempt stopped with "Timeout during connect" because the cloud firewall blocked port 80; after it was opened, `install.sh --resume` continued and kept the database and keys.
+- **HTTPS smoke test with the admin account** (staging root trusted): 13/13 passed. TLS 1.2/1.3 only; HSTS, CSP, `nosniff`, `X-Frame-Options` and `Referrer-Policy` set; locked-down permissions and systemd sandboxing; app bound to `127.0.0.1`.
+- **Found, not fixed in rc.1** (`docs/KNOWN_ISSUES.md` section 12):
+  - **A33 confirmed:** the bundled Node.js is owned by uid 1000, the `ubuntu` login user, who can change the binary that the service and the installer run (the installer runs it as root). The fix is deferred to a later release candidate; workaround: `sudo chown -R root:root /opt/watch-ledger/node`.
+  - **A34:** with `--staging-cert`, the installer's final check and `health-check.sh` always fail because staging certificates are untrusted.
+  - **A35:** nginx's default site stays enabled on the bare IP.
+
+#### Not verified
+A real full disk during restore (see `BUG_FIX_REPORT.md` section D). An install with a production certificate on a real domain, a real certificate renewal, and a reboot (section L).
+
+### v0.8.0-beta.1 (this milestone; includes everything under alpha)
+#### Added
+- **Device Control Center** on every device page: Diagnostics (plain checks with fixes), Activity (merged history), Permissions (consent as reported by the device; the owner cannot change it). Confirmation dialogs for destructive actions.
+- **Live viewing consent.** Per pairing, off by default, switched only in the extension popup, visible there and on the toolbar badge, enforced by the server (no stream and no current state without it), audited. See `docs/LIVE_MONITORING.md`.
+- **Extension popup v2**: status hero, plain-language errors, retry countdown, queue and limit, manual Reconnect, connection details, live-viewing switch.
+- **Smart sync engine**: failures classified, backoff with jitter and `Retry-After`, a few quick retries then the alarm, a rejected batch narrowed to the one bad item, a bounded event queue (events stay on the device), consent and queue state reported to the server. See `docs/SYNC_ENGINE.md`.
+- **Timeline v2**: interactive overview ribbon, quick filters, viewing boundary rows, one tested ordering and de-duplication module.
+- Migration `007_device_consents_sync_diagnostics.sql` (additive, tested against a real v0.7.0 database); `device_sync_errors` history; Health Center warns about queue overflow.
+- `docs/UPGRADING.md` (upgrade and rollback), `BUG_FIX_REPORT.md`.
+- The extension's `manifest.json` now carries `version_name` (`0.8.0-beta.1`); the ZIP is named after it.
+
+#### Changed (privacy)
+- Without live viewing, uploads of a running viewing wait for the regular sync (the end of a viewing still uploads after a few seconds) instead of going out about every 5-10 seconds. Devices on an older extension cannot enable live viewing until updated.
+
+#### Fixed
+- Events that share a timestamp are no longer interleaved between viewings; duplicates are shown once.
+- A rejected upload batch no longer blocks the queue for ever; the offline queue is bounded; retries no longer loop. See `BUG_FIX_REPORT.md` for each defect, how it was confirmed and its test.
+- The popup could show stale state when two refreshes overlapped.
+
+### v0.8.0-alpha
+#### Added
+- **Analytics** page and `GET /api/analytics`: today / 7 / 30 / 90 days or a custom range, day / week / month grouping, comparison with the previous period, watch time by hour and weekday, time per device, top videos and channels. Time comes from recorded playback runs; overlapping playback on one device is counted once; days follow Sri Lanka time.
+- **Health Center** page and owner-only `GET /api/system/health`: uptime, CPU, memory, disk, database, devices online, sync errors and backup age, with explainable warnings.
+- Dashboard v2 layer (`ui.css`): grouped sidebar, KPI tiles, rings, entrance transitions (reduced-motion aware), light glass on the sidebar only.
+- Overview shows the change against the previous period.
+- `scripts/ui-check.mjs` and a test: a real headless Chrome checks every page at phone, tablet and desktop widths for drawing, error states and sideways scroll.
+- GitHub Actions: `actions/checkout@v7` and `actions/setup-node@v7`.
+
+#### Fixed
+- **Navigation race:** a slow page (for example Overview) could finish loading after the owner had moved to another page and draw over it. Page reads from an earlier page are now dropped.
+- The installer test suite no longer fails on a host whose disk is nearly full.
+
+#### Not in this milestone yet
+Device Control Center upgrades, Timeline V2 filters, real-time device monitoring, extension popup V2, sync hardening, Diagnostics, Notifications, Reports Studio, Update Manager, Security Center, Backup Manager and Settings Studio are planned for the beta and release-candidate milestones.
+
 ## [0.7.0] - 2026-11-03
 
 ### Added

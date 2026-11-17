@@ -17,11 +17,49 @@ Optional settings in `.env` (all have safe defaults):
 | `ENROLL_RATE_MAX` | `20` | Pairing attempts per address per hour. |
 | `TRUST_PROXY` | `false` | **Set to `true` behind a reverse proxy.** Otherwise every request appears to come from the proxy's address, so one attacker's failed attempts would lock out everybody, and per-address limits would be shared. |
 
+These can also be changed from the dashboard (**Settings**, see [`SETTINGS.md`](SETTINGS.md)); a value saved there overrides the file and applies without a restart.
+
 The pairing lockout is held in memory: restarting the server clears it. The per-hour rate limit is separate.
 
 ## Video Details
 
 **Videos** lists every video your devices have played; open one for its live status, event timeline, every pause and resume, viewing history, charts and export. See [`VIDEO_DETAILS.md`](VIDEO_DETAILS.md). Upgrading to 0.7.0 applies migration `006` automatically at start (additive; take a backup first as usual).
+
+## Analytics (v0.8)
+
+**Analytics** (sidebar → Insights) answers "how much, when, and on what". Pick **Today, 7, 30 or 90 days**, or a **custom** range of up to 366 days, group by day, week or month (or let it choose), and filter to one device.
+
+- **Watch time** is the time a video was actually playing, taken from the recorded playback itself. Pauses, buffering and ads are not counted. A session recorded before v0.7.0 has no events, so its summary is used instead.
+- **No double counting:** if two tabs on one device play at the same time, or the same viewing is uploaded twice, that span is counted once and shared between the videos playing. Different devices add up. The page tells you how much overlap was removed.
+- **Comparison:** the change against the previous period of the same length, with the arrow and percentage. "New activity" means the previous period had no data.
+- **Also shown:** sessions, videos, active days, average per active day, longest session, watch time by hour of the day and day of the week, time per device, top channels and top videos (each opens Video Details).
+- Days, weeks (Monday to Sunday) and months follow **Sri Lanka time**; an interval that crosses midnight is split between the two days. API: `GET /api/analytics?range=7|30|90|365|today` or `?from=&to=` (milliseconds), `granularity=auto|day|week|month`, `device=<id>`.
+
+## Reports Studio (v0.8)
+
+**Reports** (sidebar → Insights) turns the same numbers into daily, weekly, monthly and custom-range reports, with device, channel and video filters, saved report configurations, CSV and JSON downloads and a print-ready page for **Save as PDF**. A report and the Analytics page always agree: they share one engine. Details: [`REPORTS.md`](REPORTS.md).
+
+## Update Manager (v0.8)
+
+**Updates** (sidebar → System) shows the installed version and release channel, Node.js and uptime, the history of updates made with `scripts/update.sh`, the pre-update backups (with Verify), the releases kept for rollback, and copyable, version-specific commands to update or roll back. It never runs them. The release check is off by default and runs only when you press **Check now**. Details: [`UPDATES.md`](UPDATES.md).
+
+## Health Center (v0.8)
+
+**Health** (sidebar → System) shows how the server is doing: uptime, version, CPU, memory, disk, database connection and speed, devices online, sync errors and waiting uploads, and the age of the newest backup. It refreshes every 15 seconds. Each problem (disk nearly full, no recent backup, a database that does not answer, a device reporting a sync error) shows what to do about it. Only the signed-in owner can read it (`GET /api/system/health`); it reveals no file path, address or secret. The public `/api/health` stays a bare `{ "ok": true }` for load balancers.
+
+## Device Control Center (v0.8)
+
+Open a device (**Devices → Diagnostics & controls**). The **Device Control Center** panel has three tabs:
+
+- **Diagnostics:** plain-language checks for authorisation, connection, upload freshness, the device's upload queue, errors it reported, clock difference, extension version and settings. Each problem says what to do. It re-runs every 15 seconds while open. Recent errors reported by the device are listed (the device's own message, never a credential).
+- **Activity:** newest first, merged from what you did (approve, revoke, rename, settings, commands), what the device reported (live viewing turned on or off, sync problems) and pairing events. Times are Sri Lanka time. `GET /api/devices/:id/activity`.
+- **Permissions:** who controls what. **Live viewing, tracking and the level of detail are the device user's choices**: this page shows them as reported and has no control that changes them. The settings you can change (history length, sync interval) and the commands you can send are listed with what each means. See [LIVE_MONITORING.md](LIVE_MONITORING.md).
+
+Destructive actions (reject, revoke, delete a device and its data, delete history on a device) open a confirmation dialog that says exactly what will happen and what will not be affected.
+
+## Timeline (Video Details, v0.8)
+
+The Activity timeline has an **overview ribbon** (one row per viewing, stretched over its own length; markers are events, shaded spans are pauses; click or press Enter on a marker to jump to it), **quick filters** (play and pause, seeks, buffering, tab and speed, viewing start and end) and **viewing boundary rows** between viewings. Events are always held in one order (time, then viewing, then sequence) and an event delivered twice appears once. Live status appears only for a device that allowed live viewing; otherwise the page says **LIVE VIEW OFF**.
 
 ## The Devices page
 

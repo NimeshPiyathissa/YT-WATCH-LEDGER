@@ -34,6 +34,17 @@ export function effectiveRetention(deviceDays, globalDays) {
   return deviceDays > 0 ? deviceDays : globalDays;
 }
 
+// How many sessions a server-wide window of `days` would delete right now, per the same rules as purgeDevice (the shorter of the
+// device's own window and this one). Deletes nothing: Settings Studio shows it before the owner confirms.
+export function previewRetention(db, days, now = Date.now()) {
+  let total = 0;
+  for (const d of db.prepare("SELECT id, retention_days FROM devices").all()) {
+    const eff = effectiveRetention(d.retention_days, days);
+    if (eff > 0) total += db.prepare("SELECT COUNT(*) n FROM sessions WHERE device_id=? AND start_ts_adj<?").get(d.id, now - eff * 86400000).n;
+  }
+  return total;
+}
+
 // Deletes sessions older than the effective retention window and rebuilds affected rollups.
 export function purgeDevice(db, deviceId, now = Date.now()) {
   const d = db.prepare("SELECT retention_days FROM devices WHERE id=?").get(deviceId);

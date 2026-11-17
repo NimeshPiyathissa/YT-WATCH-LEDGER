@@ -1,11 +1,9 @@
 import "./env.js";
 import argon2 from "argon2";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { openDb, migrate } from "../src/db.js";
 import { buildApp } from "../src/app.js";
 import { uuid } from "../src/lib/crypto.js";
+import { tmpDir } from "./tmpdir.js";
 
 export const PW = "correct horse battery staple";
 export const OWNER = "owner@example.com";
@@ -13,7 +11,7 @@ export const OWNER = "owner@example.com";
 export async function makeApp() {
   const db = openDb(); // in-memory SQLite
   migrate(db);
-  const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), "yt-test-bk-"));
+  const backupDir = tmpDir("yt-test-bk-");
   const app = await buildApp({ db, config: { backupDir, backupKeep: 3 } });
   await app.ready();
   return { app, db, backupDir };
@@ -52,6 +50,13 @@ export async function enrollDevice(app, ownerCookie, label = "Test device", { ap
   if (j.status !== (approve ? "active" : "pending")) throw new Error("unexpected status after pairing: " + j.status);
   const { auth } = await accessFor(app, j.refreshToken);
   return { deviceId: j.deviceId, sessionId: j.sessionId, refresh: j.refreshToken, auth, confirmCode: j.confirmCode, code };
+}
+
+// The person at the device switches "live viewing" on in the extension, which then reports it with its next upload.
+// This does exactly that over the real route, so a test never edits the database to pretend it happened.
+export async function allowLiveView(app, dev, on = true) {
+  const r = await app.inject({ method: "POST", url: "/api/sync/push", headers: dev.auth, payload: { sessions: [], consents: { liveView: on } } });
+  if (r.statusCode !== 200) throw new Error("could not report the live view consent: " + r.statusCode);
 }
 
 export const session = (id, video, over = {}) => ({

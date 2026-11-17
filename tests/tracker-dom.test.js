@@ -329,3 +329,27 @@ test("the snapshot sent to the service worker still honours the user's privacy s
   assert.equal(s.channel, ""); assert.equal(s.channelUrl || "", ""); assert.equal(s.url, "");
   for (const e of p.events()) assert.deepEqual(Object.keys(e).sort(), ["id", "meta", "next", "pos", "prev", "rate", "seq", "sessionId", "ts", "type", "videoId"]);
 });
+
+// BUG_FIX_REPORT A19, measured in real Chrome: the message that ends a viewing is sent while the page is going away and is often
+// lost (20-60% of the time when leaving by navigation). The saved recorder state was cleared at the same moment, so a lost message left
+// nothing to recover from and the viewing stayed open for ever (2 of 4 trials of one way of leaving). The saved state must outlive the end
+// until the service worker has taken the end event.
+test("the saved recorder state is kept when a viewing ends, so a lost end message can still be recovered", () => {
+  const p = makePage();
+  p.play().advance(10).tick();
+  p.win("pagehide");
+  assert.ok(p.types().includes("VIDEO_SESSION_ENDED"), "the end event was sent");
+  assert.ok(p.store.live_rec, "saved recorder state still there");
+  assert.equal(p.store.live_rec.sessionId, "uuid-1");
+  assert.equal(p.store.live_rec.finished, false, "not marked finished: only the worker's acknowledgement may retire it");
+});
+
+test("a viewing that ended normally is not reported as interrupted when the next one starts in the same tab", () => {
+  const p = makePage();
+  p.play().advance(30);
+  p.state.search = "?v=vid2"; p.video.currentTime = 0;
+  p.doc("yt-navigate-finish");
+  p.advance(1).tick();
+  assert.equal(p.types().filter(t => t === "VIDEO_SESSION_ENDED").length, 1);
+  assert.equal(p.types().filter(t => t === "VIDEO_SESSION_INTERRUPTED").length, 0, "no second, contradictory end for the first viewing");
+});

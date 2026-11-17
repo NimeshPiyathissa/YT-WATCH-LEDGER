@@ -20,6 +20,15 @@ import eventRoutes from "./routes/events.js";
 import deviceConfigRoutes from "./routes/deviceConfig.js";
 import videoIngestRoutes from "./routes/videoIngest.js";
 import videoRoutes from "./routes/videos.js";
+import analyticsRoutes from "./routes/analytics.js";
+import healthRoutes from "./routes/health.js";
+import deviceCenterRoutes from "./routes/deviceCenter.js";
+import securityRoutes from "./routes/security.js";
+import notificationRoutes from "./routes/notifications.js";
+import settingsStudioRoutes from "./routes/settingsStudio.js";
+import reportRoutes from "./routes/reports.js";
+import updateRoutes from "./routes/updates.js";
+import { applyRuntime } from "./lib/settings.js";
 import { createHub } from "./lib/realtime.js";
 
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "web");
@@ -72,6 +81,16 @@ export async function buildApp({ db, logger = false, https = null, config = {} }
   await app.register(deviceConfigRoutes, { db });
   await app.register(videoIngestRoutes, { db });
   await app.register(videoRoutes, { db });
+  await app.register(analyticsRoutes, { db });
+  await app.register(healthRoutes, { db, config });
+  await app.register(deviceCenterRoutes, { db, config });
+  await app.register(securityRoutes, { db });
+  await app.register(notificationRoutes, { db, config });
+  await app.register(settingsStudioRoutes, { db, config });
+  await app.register(reportRoutes, { db });
+  await app.register(updateRoutes, { db, config });
+  app.decorate("wlConfig", config); // the live configuration the owner can change; the timers in server.js read it too
+  applyRuntime(db, config);          // the owner's saved values win over the environment from the first request
   await app.register(fastifyStatic, { root: WEB }); // admin SPA (PART B §B7)
 
   app.get("/api/health", async () => ({ ok: true }));

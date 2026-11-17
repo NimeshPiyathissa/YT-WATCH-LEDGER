@@ -31,6 +31,7 @@ Watch Ledger is a **Chrome extension** plus a **small server you run yourself**.
 - **Video Details.** Click any video for a live page: `LIVE WATCHING`, `PAUSED — 00:12:41`, `COMPLETED`, `DEVICE OFFLINE`; a timeline of every pause, resume, seek and buffering interval; five charts; CSV / JSON / printable-report export.
 - **Private by design.** Records are AES-256-GCM encrypted at rest; the admin password is argon2id; one owner, no sign-up page.
 - **Visible, consent-first.** The extension shows a `REC` badge, the popup always shows the connection, and sync starts only when someone at the browser enters a pairing code and grants the permission prompt.
+- **Consent you can see.** Live viewing (what is playing right now) is **off** until the person at the device turns it on; the extension then shows it in the popup and on the toolbar badge ([how it works](docs/LIVE_MONITORING.md)).
 - **Self-hosting that does not need a sysadmin.** A guided installer sets up the server, HTTPS and automatic renewal on a fresh Ubuntu VPS.
 
 ## Responsible use
@@ -162,9 +163,15 @@ A cinematic 16:9 (75 s) and a vertical 9:16 (56 s) overview are attached to the 
 | Manual (non-installer) deployment | [DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 | Admin dashboard | [ADMIN_DASHBOARD.md](docs/ADMIN_DASHBOARD.md) |
 | Video Details | [VIDEO_DETAILS.md](docs/VIDEO_DETAILS.md) |
+| Live viewing and consent | [LIVE_MONITORING.md](docs/LIVE_MONITORING.md) |
+| How the extension syncs | [SYNC_ENGINE.md](docs/SYNC_ENGINE.md) |
+| Upgrading and rolling back | [UPGRADING.md](docs/UPGRADING.md) |
+| Update Manager (versions, update history, rollback commands) | [UPDATES.md](docs/UPDATES.md) |
+| Reports Studio | [REPORTS.md](docs/REPORTS.md) |
+| Building and publishing a release | [RELEASING.md](docs/RELEASING.md) |
 | Full behaviour reference | [FEATURES.md](docs/FEATURES.md) |
 | Known issues | [KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) |
-| Manual browser test lists | [general](docs/MANUAL_TEST_CHECKLIST.md), [Video Details](docs/MANUAL_TEST_CHECKLIST_VIDEO_DETAILS.md) |
+| Manual browser test lists | [general](docs/MANUAL_TEST_CHECKLIST.md), [Video Details](docs/MANUAL_TEST_CHECKLIST_VIDEO_DETAILS.md), [extension](docs/MANUAL_TEST_CHECKLIST_EXTENSION.md) |
 | Security | [SECURITY.md](SECURITY.md) |
 | Contributing, changelog | [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md) |
 | Background (academic origins) | [docs/project-notes/](docs/project-notes/SUBMISSION.md) |

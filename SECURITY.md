@@ -7,6 +7,10 @@ Run the tests with `cd server && npm test`.
 
 ## Enforced by code
 
+- [x] **Consent is the device's, and the server enforces it (v0.8).** Live viewing, tracking and watch-detail switches are *reported* by the device and recorded; no owner route changes them. With live viewing off, no real-time stream and no current state reach the owner (checked by the server, not just hidden in the page). Every change is audited. Only booleans are accepted; junk is ignored. *Tests: migration-007, sync-engine.*
+- [x] **Device diagnostics and activity are owner-only and credential-free (v0.8).** Both routes answer 401 without the owner's cookie and with a device token; the output is built from an allowlist and fields that look like secrets are dropped. *Tests: device-center, route-auth sweep.*
+- [x] **Reported values are bounded (v0.8).** Queue counts are clamped, error text is truncated to 300 characters and shown only through HTML escaping, error kinds are an allowlist. *Tests: migration-007.*
+
 - [x] **HTTPS only.** `server.js` refuses to start with `NODE_ENV=production` unless it holds `TLS_CERT`/`TLS_KEY` or `TRUST_PROXY=true` (TLS terminated by a proxy, server bound to loopback), and requires an `https://` `BASE_URL`. Responses carry HSTS. The extension refuses non-https server addresses (plain http only for `localhost`/`127.0.0.1` during development). *Operator: obtain the certificate and keep the proxy correct, see below.*
 - [x] **Password and token storage.** The owner password: argon2id. Device credentials and refresh tokens: 256-bit random, stored only as SHA-256. Device access tokens: HMAC-signed, 15 minutes. Pairing codes: stored hashed, single-use (claimed atomically), 15-minute expiry. Login always performs a hash verification so unknown emails are not distinguishable by timing. *Tests: auth, authz.*
 - [x] **Sessions.** 15-minute HMAC-signed access cookie plus a rotating, revocable refresh cookie (`HttpOnly; Secure; SameSite=Strict`, signed; refresh cookie scoped to `/api/auth`). Replaying an already-rotated refresh token revokes all of that admin's sessions. Logout revokes. *Tests: auth.*

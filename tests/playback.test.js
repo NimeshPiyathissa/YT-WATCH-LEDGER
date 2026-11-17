@@ -387,3 +387,28 @@ test("local date and time in a chosen zone convert to the right UTC instant, acr
   assert.match(P.formatTime(ts, "America/New_York"), /^12:15:00\sPM$/);
   assert.equal(P.zonedToUtc(2026, 1, 1, 0, 0, 0, 0, "Not/AZone"), P.zonedToUtc(2026, 1, 1, 0, 0, 0, 0, "Asia/Colombo"), "an invalid zone is treated as Sri Lanka time, never the machine's zone");
 });
+
+// BUG_FIX_REPORT A18, found in real Chrome: a seek to a place that is not buffered can stay "seeking" for many seconds. The recorder
+// emitted nothing while seeking, so the whole stall was counted as playing time. It is now a stall, like any other.
+test("a seek that takes a long time to finish counts as buffering, not as playing time", () => {
+  const v = player();
+  v.play().wait(10);
+  const obsOf = () => ({ pos: v.p.pos, rate: 1, paused: false, ended: false, seeking: v.p.seeking, waiting: false, adShowing: false, hidden: false, duration: 600 });
+  const feed = h => v.events.push(...v.rec.observe(obsOf(), v.p.t, h));
+  v.p.seeking = true; v.p.pos = 300; feed("seeking");
+  v.p.t += 1 * S; feed("reconcile");          // still seeking after the debounce: the stall is recorded
+  v.p.t += 29 * S; feed("reconcile");         // 30 s in, still nothing to play
+  v.p.seeking = false; v.p.t += 1 * S; feed("seeked");
+  v.wait(20).stop();
+  const f = v.fold();
+  assert.deepEqual(v.types().filter(t => t !== "VIDEO_SESSION_ENDED"), ["VIDEO_STARTED", "VIDEO_BUFFERING_STARTED", "VIDEO_SEEKED", "VIDEO_BUFFERING_ENDED"]);
+  assert.equal(Math.round(f.metrics.activeMs / S), 30, "10 s before + 20 s after; the 31 s wait for the seek is not playing time");
+  assert.equal(Math.round(f.metrics.bufferingMs / S), 31);
+  assert.equal(f.metrics.seekCount, 1);
+});
+
+test("a quick seek (under the stall threshold) still produces just one VIDEO_SEEKED and no buffering", () => {
+  const v = player();
+  v.play().wait(10).seek(200).wait(10).stop();
+  assert.deepEqual(v.types().filter(t => t !== "VIDEO_SESSION_ENDED"), ["VIDEO_STARTED", "VIDEO_SEEKED"]);
+});
