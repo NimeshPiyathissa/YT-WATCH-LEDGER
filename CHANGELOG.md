@@ -4,7 +4,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased] - v0.8.0 development (branch `develop/v0.8.0`)
 
-### v0.8.0-rc.1 (release candidate, prepared 2026-11-09; not published)
+### v0.8.0-rc.1 (release candidate, prepared 2026-11-09; published 2026-11-17 as a GitHub pre-release, tag `v0.8.0-rc.1` = commit `b17d4a7`)
 Version metadata: `manifest.json` `version_name` `0.8.0-rc.1` (`version` stays `0.8.0`), `server/package.json` and `package-lock.json` `0.8.0-rc.1`. Database migrations since v0.7.0: `007` (device consents and sync diagnostics), `008` (notifications), `009` (saved reports), all additive. Upgrading from v0.7.0, the RC limits and rolling back: `docs/UPGRADING.md`.
 
 #### Added
@@ -36,8 +36,20 @@ Version metadata: `manifest.json` `version_name` `0.8.0-rc.1` (`version` stays `
 - Restore: refuses backups from a newer release or that this key cannot read; writes atomically (a failed copy leaves the live database untouched); the safety copy keeps un-merged write-ahead-log data; verifies the result. Crashed backups leave no permanent `.partial` files. Details in `BUG_FIX_REPORT.md` (A8-A12).
 - Expired owner sign-in tokens are deleted. Ending another browser no longer makes its retry look like theft (A14, B5).
 
+#### Verified on a real server (staging, 2026-11-16 and 2026-11-17)
+An isolated staging install on an Ubuntu 24.04 VPS (its own service user, loopback port reached through an SSH tunnel, boot-disabled unit), upgraded with **v0.7.0's own `update.sh`** from the verified rc.1 tarball (`watch-ledger-v0.8.0-rc.1.tar.gz`, SHA-256 `c9923145…`), the path real users take.
+- **Update v0.7.0 → rc.1:** `update.sh --dry-run` changed nothing; the real update verified the checksum, took a verified pre-update backup (integrity ok, migrations 001-006), applied `007`-`009` (exactly 001-009 afterwards), switched and passed the health check. Every data table's row count was unchanged, the service restarted once (about 1 s), no warnings or errors were logged, and the service user, loopback binding, resource limits and boot state were unchanged.
+- **After the update:** every dashboard page on rc.1; a v0.7.0 extension against the rc.1 server; a fresh rc.1 extension tracking real YouTube playback; pairing code → pair request → approve; revoke (no events accepted afterwards); an extension upgraded in place from v0.7.0 to rc.1 kept its pairing and tracked play, pause, resume, tab hidden/visible and the end of the viewing. Database integrity and foreign keys clean, no sync errors, no 5xx responses, no service restarts.
+- **Backup and rollback:** rc.1's `backup.sh` made a verified backup holding every table; rolling back to v0.7.0 with v0.7.0's `restore.sh` and the pre-update backup gave exactly the pre-update data (all tables), kept the rc.1 database aside intact, and v0.7.0 started healthy.
+- **Upgrade again after the rollback:** `update.sh` reused the kept `releases/0.8.0` only after it was checked byte-identical to the rc.1 tarball, took a new pre-update backup (byte-identical to the first one: the restored data was untouched), applied `007`-`009` and passed the health check with every row count unchanged.
+- Seen during the tests, product not changed: two copies of the extension loaded in one Chrome profile record properly only in the first one installed (the other records only the start and tab-hidden events), so install one copy; a device's reported client version is the manifest `version` (`0.8.0`), not `version_name` (`0.8.0-rc.1`).
+
+#### Real-Chrome end-to-end test (2026-11-17, Windows, `WL_EXT_E2E=1`)
+- Against real YouTube (run twice): 5 ok, 0 failed, 4 blocked. Loading, pairing, the popup, live-viewing consent and revoke passed; playback, sync, events and the outage check were blocked because YouTube did not serve a playable video to the automated browser (real-YouTube playback was instead checked by hand on staging, above). 40 quick pause/resume cycles: 40 / 40 recorded exactly once, 0 late.
+- With the local stand-in watch page (`WL_E2E_MOCK=1`): 9 ok, 0 blocked, 0 failed, 0 Chrome warnings.
+
 #### Not verified
-The installed extension on a live YouTube page, a real VPS, and a real full disk during restore. See `BUG_FIX_REPORT.md` section D.
+A real full disk during restore. See `BUG_FIX_REPORT.md` section D.
 
 ### v0.8.0-beta.1 (this milestone; includes everything under alpha)
 #### Added
